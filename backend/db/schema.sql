@@ -1,0 +1,46 @@
+USE dealflow360;
+
+CREATE TABLE customers (
+  id VARCHAR(20) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  company VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  phone VARCHAR(20),
+  tier ENUM('BRONZE', 'SILVER', 'GOLD') NOT NULL,
+  credit_limit DECIMAL(12,2),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE products (
+  id VARCHAR(20) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  category VARCHAR(100) NOT NULL,
+  type ENUM('GOOD', 'SERVICE') NOT NULL,
+  billing_type ENUM('ONE_TIME', 'RECURRING') NOT NULL,
+  sale_price DECIMAL(12,2) NOT NULL,
+  cost_price DECIMAL(12,2) NOT NULL,
+  currency VARCHAR(10) DEFAULT 'INR',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE warehouses (
+  id VARCHAR(20) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  location VARCHAR(255) NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE inventory (
+  id VARCHAR(20) PRIMARY KEY,
+  warehouse_id VARCHAR(20) NOT NULL,
+  product_id VARCHAR(20) NOT NULL,
+  available_quantity INT DEFAULT 0,
+  reserved_quantity INT DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+  FOREIGN KEY (product_id) REFERENCES products(id)
+);
