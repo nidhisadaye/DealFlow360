@@ -166,3 +166,17 @@ CREATE TABLE IF NOT EXISTS warehouse_allocations (
   FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
   FOREIGN KEY (product_id) REFERENCES products(id)
 );
+
+CREATE TABLE IF NOT EXISTS negotiations (
+  id VARCHAR(40) PRIMARY KEY,
+  deal_id VARCHAR(40) NOT NULL,
+  actor_id VARCHAR(40) NOT NULL,
+  description TEXT NOT NULL,
+  proposed_discount_percent DECIMAL(5,2) DEFAULT NULL,
+  note VARCHAR(500) DEFAULT NULL,
+  status ENUM('OPEN','CLOSED','REJECTED') NOT NULL DEFAULT 'OPEN',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE,
+  FOREIGN KEY (actor_id) REFERENCES users(id)
+);
