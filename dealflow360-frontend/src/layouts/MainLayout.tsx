@@ -21,6 +21,8 @@ import Approvals from "../pages/Approvals";
 import Fulfillment from "../pages/Fulfillment";
 import Billing from "../pages/Billing";
 import CustomerPortal from "../pages/CustomerPortal";
+import Reports from "../pages/Reports";
+import Chatbot from "../components/Chatbot";
 
 type Page =
   | "Dashboard"
@@ -260,6 +262,9 @@ function MainLayout() {
       case "Customers":
         return <CustomerPortal />;
 
+      case "Reports":
+        return <Reports />;
+
       case "Settings":
         return renderSettings();
 
@@ -395,7 +400,9 @@ function MainLayout() {
         </header>
 
         <main className="content-area">{renderPage()}</main>
-      </div>
+            </div>
+
+      <Chatbot />
     </div>
   );
 }

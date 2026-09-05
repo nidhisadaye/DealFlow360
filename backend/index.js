@@ -1,3 +1,4 @@
+const chatbotRoutes = require('./routes/chatbot');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -5,6 +6,7 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/api/chatbot', chatbotRoutes);
 
 const pool = require('./config/db');
 const { DealStatus } = require('./config/enums');
