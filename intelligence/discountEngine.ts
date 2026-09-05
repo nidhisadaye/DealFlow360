@@ -6,14 +6,23 @@ import {
 } from "../shared/types";
 
 export interface DiscountEvaluation {
-  requestedDiscount: number;
-  allowedDiscount: number;
+  requested: number;
+  allowed: number;
 
   exceeded: boolean;
   excessPercent: number;
+}
 
-  approvalRequired: boolean;
-
+/**
+ * Wraps the contract-facing DiscountEvaluation together with diagnostic
+ * `reasons` (rule-lookup misses, the exceeded-discount message, etc.).
+ * `reasons` is intentionally NOT part of DiscountEvaluation itself so it
+ * never leaks into the final DealEvaluation.discount object — callers that
+ * want this diagnostic info (e.g. to fold into DealEvaluation.warnings)
+ * read it off `reasons` here instead.
+ */
+export interface DiscountEvaluationResult {
+  evaluation: DiscountEvaluation;
   reasons: string[];
 }
 
@@ -22,7 +31,7 @@ export function evaluateDiscount(
   customer: Customer,
   products: Product[],
   rules: DiscountRule[]
-): DiscountEvaluation {
+): DiscountEvaluationResult {
   const activeRules = rules.filter(
     (rule) => rule.isActive
   );
@@ -83,9 +92,6 @@ export function evaluateDiscount(
       ? requestedDiscount - allowedDiscount
       : 0;
 
-  const approvalRequired =
-    exceeded;
-
   if (exceeded) {
     reasons.push(
       `Requested discount of ${requestedDiscount}% exceeds allowed discount of ${allowedDiscount}%.`
@@ -93,11 +99,12 @@ export function evaluateDiscount(
   }
 
   return {
-    requestedDiscount,
-    allowedDiscount,
-    exceeded,
-    excessPercent,
-    approvalRequired,
+    evaluation: {
+      requested: requestedDiscount,
+      allowed: allowedDiscount,
+      exceeded,
+      excessPercent,
+    },
     reasons,
   };
 }

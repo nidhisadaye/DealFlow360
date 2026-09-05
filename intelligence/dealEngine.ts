@@ -31,15 +31,15 @@ export interface DealEvaluation {
 }
 
 function mergeWarnings(
-  discountEvaluation: DiscountEvaluation,
+  discountReasons: string[],
   riskEvaluation: RiskEvaluation
 ): string[] {
-  const combined = [
-    ...discountEvaluation.reasons,
-    ...riskEvaluation.warnings,
-  ];
+  const messages: string[] = [];
 
-  return Array.from(new Set(combined));
+  messages.push(...discountReasons);
+  messages.push(...riskEvaluation.warnings);
+
+  return Array.from(new Set(messages));
 }
 
 function determineStatus(
@@ -56,12 +56,8 @@ export function evaluateDeal(
   inventory: Inventory[],
   warehouses: Warehouse[]
 ): DealEvaluation {
-  const discountEvaluation = evaluateDiscount(
-    deal,
-    customer,
-    products,
-    rules
-  );
+  const { evaluation: discountEvaluation, reasons: discountReasons } =
+    evaluateDiscount(deal, customer, products, rules);
 
   const riskEvaluation = evaluateRisk(
     deal,
@@ -76,7 +72,7 @@ export function evaluateDeal(
 
   const status = determineStatus(approvalDecision);
 
-  const warnings = mergeWarnings(discountEvaluation, riskEvaluation);
+  const warnings = mergeWarnings(discountReasons, riskEvaluation);
 
   const upsells = generateUpsellRecommendations(deal, products);
 
