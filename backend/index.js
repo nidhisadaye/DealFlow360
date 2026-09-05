@@ -6,11 +6,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const pool = require('./config/db');
+const { DealStatus } = require('./config/enums');
+const authRoutes = require('./routes/auth');
+const dealRoutes = require('./routes/deals');
+const customerRoutes = require('./routes/customers');
+const productRoutes = require('./routes/products');
+const approvalRoutes = require('./routes/approvals');
+
 app.get('/', (req, res) => {
   res.json({ success: true, data: { message: 'DealFlow360 backend running' } });
 });
-
-const pool = require('./config/db');
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -21,7 +27,11 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-const { DealStatus } = require('./config/enums');
+app.use('/api/auth', authRoutes);
+app.use('/api/deals', dealRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api', approvalRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
