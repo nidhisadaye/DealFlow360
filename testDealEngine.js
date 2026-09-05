@@ -1,750 +1,491 @@
 "use strict";
+/**
+ * Phase 5 test suite for warehouseEngine, plus regression coverage for
+ * Phase 1-4 behavior of the surrounding deal-evaluation engines.
+ *
+ * This is a lightweight, dependency-free assertion runner (no test
+ * framework required) so it can run directly under ts-node/node in any
+ * environment.
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
+const warehouseEngine_1 = require("./intelligence/warehouseEngine");
+const discountEngine_1 = require("./intelligence/discountEngine");
+const riskEngine_1 = require("./intelligence/riskEngine");
+const approvalEngine_1 = require("./intelligence/approvalEngine");
+const upsellEngine_1 = require("./intelligence/upsellEngine");
 const dealEngine_1 = require("./intelligence/dealEngine");
-// ============================================================
-// SHARED TEST DATA
-// ============================================================
-const customer = {
-    id: "CUST-001",
-    name: "Acme Corp",
-    company: "Acme Corporation",
-    email: "contact@acme.com",
-    tier: "GOLD",
-    isActive: true,
-    createdAt: new Date().toISOString(),
-};
-const products = [
-    {
-        id: "PROD-HW-001",
-        name: "Enterprise Laptop",
-        description: "High-performance business laptop",
+// ---------------------------------------------------------------------
+// Minimal assertion helpers
+// ---------------------------------------------------------------------
+let passed = 0;
+let failed = 0;
+const failures = [];
+function assertEqual(actual, expected, label) {
+    const ok = JSON.stringify(actual) === JSON.stringify(expected);
+    if (ok) {
+        passed++;
+    }
+    else {
+        failed++;
+        failures.push(`${label}\n  expected: ${JSON.stringify(expected)}\n  actual:   ${JSON.stringify(actual)}`);
+    }
+}
+function assertTrue(condition, label) {
+    if (condition) {
+        passed++;
+    }
+    else {
+        failed++;
+        failures.push(`${label} (expected true, got false)`);
+    }
+}
+// ---------------------------------------------------------------------
+// Fixture builders
+// ---------------------------------------------------------------------
+function makeWarehouse(id, name, isActive = true) {
+    return { id, name, location: "N/A", isActive, createdAt: "2024-01-01" };
+}
+function makeInventory(warehouseId, productId, availableQuantity, reservedQuantity = 0) {
+    return {
+        id: `inv-${warehouseId}-${productId}-${Math.random()}`,
+        warehouseId,
+        productId,
+        availableQuantity,
+        reservedQuantity,
+        updatedAt: "2024-01-01",
+    };
+}
+function makeDealItem(productId, quantity) {
+    return {
+        id: `item-${productId}`,
+        dealId: "deal-1",
+        productId,
+        productName: productId,
+        quantity,
+        unitPrice: 100,
+        unitCost: 60,
+        billingType: "ONE_TIME",
+        discountPercent: 0,
+        subtotal: 100 * quantity,
+        total: 100 * quantity,
+    };
+}
+function makeDeal(items) {
+    return {
+        id: "deal-1",
+        customerId: "cust-1",
+        salesRepId: "rep-1",
+        title: "Test deal",
+        status: "DRAFT",
+        items,
+        discountPercent: 0,
+        subtotal: 0,
+        discountAmount: 0,
+        totalAmount: 0,
+        costAmount: 0,
+        marginAmount: 0,
+        marginPercent: 25,
+        riskScore: 0,
+        riskLevel: "LOW",
+        currency: "USD",
+        createdAt: "2024-01-01",
+        updatedAt: "2024-01-01",
+    };
+}
+// =======================================================================
+// PHASE 5 — WAREHOUSE ENGINE TESTS
+// =======================================================================
+// 1. Full allocation from one warehouse
+(function test1() {
+    const deal = makeDeal([makeDealItem("P1", 10)]);
+    const inventory = [makeInventory("W1", "P1", 10)];
+    const warehouses = [makeWarehouse("W1", "Warehouse 1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test1: single allocation record");
+    assertEqual(result[0].status, "ALLOCATED", "Test1: status ALLOCATED");
+    assertEqual(result[0].quantity, 10, "Test1: full quantity allocated");
+})();
+// 2. Split allocation across two warehouses
+(function test2() {
+    const deal = makeDeal([makeDealItem("P1", 10)]);
+    const inventory = [
+        makeInventory("A", "P1", 6),
+        makeInventory("B", "P1", 4),
+    ];
+    const warehouses = [makeWarehouse("A", "A"), makeWarehouse("B", "B")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 2, "Test2: two allocation records");
+    assertEqual(result[0].warehouseId, "A", "Test2: A allocated first");
+    assertEqual(result[0].quantity, 6, "Test2: A gets 6");
+    assertEqual(result[1].warehouseId, "B", "Test2: B allocated second");
+    assertEqual(result[1].quantity, 4, "Test2: B gets 4");
+    assertTrue(result.every((r) => r.status === "ALLOCATED"), "Test2: both records ALLOCATED");
+})();
+// 3. Split allocation across three warehouses
+(function test3() {
+    const deal = makeDeal([makeDealItem("P1", 15)]);
+    const inventory = [
+        makeInventory("A", "P1", 5),
+        makeInventory("B", "P1", 5),
+        makeInventory("C", "P1", 5),
+    ];
+    const warehouses = [
+        makeWarehouse("A", "A"),
+        makeWarehouse("B", "B"),
+        makeWarehouse("C", "C"),
+    ];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 3, "Test3: three allocation records");
+    assertEqual(result.reduce((sum, r) => sum + r.quantity, 0), 15, "Test3: total allocated equals required");
+    assertTrue(result.every((r) => r.status === "ALLOCATED"), "Test3: all ALLOCATED");
+})();
+// 4. Partial allocation
+(function test4() {
+    const deal = makeDeal([makeDealItem("P1", 10)]);
+    const inventory = [makeInventory("A", "P1", 6), makeInventory("B", "P1", 2)];
+    const warehouses = [makeWarehouse("A", "A"), makeWarehouse("B", "B")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 2, "Test4: two allocation records");
+    assertTrue(result.every((r) => r.status === "PARTIAL"), "Test4: both PARTIAL");
+    assertEqual(result.reduce((sum, r) => sum + r.quantity, 0), 8, "Test4: total allocated is 8 (never phantom)");
+})();
+// 5. Completely unavailable product
+(function test5() {
+    const deal = makeDeal([makeDealItem("P1", 10)]);
+    const inventory = [makeInventory("A", "P1", 0), makeInventory("B", "P1", 0)];
+    const warehouses = [makeWarehouse("A", "A"), makeWarehouse("B", "B")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test5: single UNAVAILABLE record");
+    assertEqual(result[0].status, "UNAVAILABLE", "Test5: status UNAVAILABLE");
+    assertEqual(result[0].quantity, 0, "Test5: zero quantity");
+    assertEqual(result[0].warehouseId, "A", "Test5: representative is first active warehouse");
+})();
+// 6. No active warehouses -> UNASSIGNED
+(function test6() {
+    const deal = makeDeal([makeDealItem("P1", 10)]);
+    const inventory = [makeInventory("A", "P1", 10)];
+    const warehouses = [makeWarehouse("A", "A", false)];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test6: single record");
+    assertEqual(result[0].status, "UNAVAILABLE", "Test6: status remains UNAVAILABLE");
+    assertEqual(result[0].warehouseId, "UNASSIGNED", "Test6: warehouseId UNASSIGNED");
+})();
+// 7. Zero inventory
+(function test7() {
+    const deal = makeDeal([makeDealItem("P1", 5)]);
+    const inventory = [makeInventory("A", "P1", 0)];
+    const warehouses = [makeWarehouse("A", "A")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test7: single record");
+    assertEqual(result[0].status, "UNAVAILABLE", "Test7: UNAVAILABLE for zero inventory");
+})();
+// 8. Negative inventory never increases availability
+(function test8() {
+    const deal = makeDeal([makeDealItem("P1", 5)]);
+    const inventory = [makeInventory("A", "P1", -100)];
+    const warehouses = [makeWarehouse("A", "A")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test8: single record");
+    assertEqual(result[0].status, "UNAVAILABLE", "Test8: negative inventory treated as none");
+    assertTrue(result[0].quantity >= 0, "Test8: quantity never negative");
+})();
+// 9. Duplicate inventory rows are aggregated, not double-counted as separate warehouses
+(function test9() {
+    const deal = makeDeal([makeDealItem("P1", 8)]);
+    const inventory = [
+        makeInventory("A", "P1", 5),
+        makeInventory("A", "P1", 5),
+    ];
+    const warehouses = [makeWarehouse("A", "A")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test9: single allocation record (one warehouse)");
+    assertEqual(result[0].quantity, 8, "Test9: allocates required amount from aggregated stock");
+    assertEqual(result[0].status, "ALLOCATED", "Test9: ALLOCATED since aggregated stock (10) covers requirement");
+})();
+// 10. Multiple products evaluated independently
+(function test10() {
+    const deal = makeDeal([makeDealItem("A", 10), makeDealItem("B", 20)]);
+    const inventory = [
+        makeInventory("W1", "A", 10),
+        makeInventory("W1", "B", 5),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    const forA = result.filter((r) => r.productId === "A");
+    const forB = result.filter((r) => r.productId === "B");
+    assertEqual(forA.length, 1, "Test10: one record for A");
+    assertEqual(forA[0].status, "ALLOCATED", "Test10: A fully allocated");
+    assertEqual(forA[0].quantity, 10, "Test10: A gets 10");
+    assertEqual(forB.length, 1, "Test10: one record for B");
+    assertEqual(forB[0].status, "PARTIAL", "Test10: B partially allocated");
+    assertEqual(forB[0].quantity, 5, "Test10: B gets only what's available");
+})();
+// 11. One product full + another partial (no cross-contamination)
+(function test11() {
+    const deal = makeDeal([makeDealItem("A", 5), makeDealItem("B", 5)]);
+    const inventory = [
+        makeInventory("W1", "A", 5),
+        makeInventory("W1", "B", 3),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    const forA = result.find((r) => r.productId === "A");
+    const forB = result.find((r) => r.productId === "B");
+    assertEqual(forA.status, "ALLOCATED", "Test11: A ALLOCATED");
+    assertEqual(forB.status, "PARTIAL", "Test11: B PARTIAL");
+    assertEqual(forB.quantity, 3, "Test11: B not inflated by A's stock");
+})();
+// 12. One product full + another unavailable
+(function test12() {
+    const deal = makeDeal([makeDealItem("A", 5), makeDealItem("B", 5)]);
+    const inventory = [
+        makeInventory("W1", "A", 5),
+        makeInventory("W1", "B", 0),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    const forA = result.find((r) => r.productId === "A");
+    const forB = result.find((r) => r.productId === "B");
+    assertEqual(forA.status, "ALLOCATED", "Test12: A ALLOCATED");
+    assertEqual(forB.status, "UNAVAILABLE", "Test12: B UNAVAILABLE");
+})();
+// 13. Inventory greater than required -> never allocate more than required
+(function test13() {
+    const deal = makeDeal([makeDealItem("A", 10)]);
+    const inventory = [makeInventory("W1", "A", 100)];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test13: single record");
+    assertEqual(result[0].quantity, 10, "Test13: only required quantity allocated, not all 100");
+    assertEqual(result[0].status, "ALLOCATED", "Test13: ALLOCATED");
+})();
+// 14. Required quantity zero -> no allocation records
+(function test14() {
+    const deal = makeDeal([makeDealItem("A", 0)]);
+    const inventory = [makeInventory("W1", "A", 10)];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 0, "Test14: zero required quantity produces no allocation");
+})();
+// 15. Negative required quantity -> no allocation, never negative output
+(function test15() {
+    const deal = makeDeal([makeDealItem("A", -5)]);
+    const inventory = [makeInventory("W1", "A", 10)];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 0, "Test15: negative required quantity produces no allocation");
+})();
+// 16. Invalid/NaN quantity -> handled without crashing, no phantom allocation
+(function test16() {
+    const deal = makeDeal([makeDealItem("A", NaN)]);
+    const inventory = [makeInventory("W1", "A", 10)];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 0, "Test16: NaN quantity produces no allocation");
+    assertTrue(result.every((r) => Number.isFinite(r.quantity)), "Test16: no NaN in output");
+})();
+// 17. Infinity quantity -> handled without crashing, never hangs or produces NaN/Infinity
+(function test17() {
+    const deal = makeDeal([makeDealItem("A", Infinity)]);
+    const inventory = [makeInventory("W1", "A", 10)];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 0, "Test17: Infinity quantity produces no allocation");
+    assertTrue(result.every((r) => Number.isFinite(r.quantity)), "Test17: no Infinity in output");
+})();
+// 18. Invalid inventory quantity (NaN in inventory record) -> treated as unusable, no crash
+(function test18() {
+    const deal = makeDeal([makeDealItem("A", 5)]);
+    const inventory = [
+        makeInventory("W1", "A", NaN),
+        makeInventory("W2", "A", Infinity),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1"), makeWarehouse("W2", "W2")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test18: single record");
+    assertEqual(result[0].status, "UNAVAILABLE", "Test18: invalid inventory treated as zero usable stock");
+    assertTrue(result.every((r) => Number.isFinite(r.quantity)), "Test18: no NaN/Infinity in output");
+})();
+// 19. Multiple warehouses with deterministic ordering
+(function test19() {
+    const deal = makeDeal([makeDealItem("A", 10)]);
+    const inventory = [
+        makeInventory("Z", "A", 5),
+        makeInventory("A", "A", 5),
+    ];
+    const warehouses = [makeWarehouse("Z", "Z warehouse"), makeWarehouse("A", "A warehouse")];
+    const result1 = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    const result2 = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    // Order follows the order warehouses were supplied in (Z before A here),
+    // not alphabetical id order -- and must be identical across calls.
+    assertEqual(result1[0].warehouseId, "Z", "Test19: allocation follows supplied warehouse order");
+    assertEqual(result1, result2, "Test19: identical result across repeated calls");
+})();
+// 20. Repeated evaluation of the same deal produces the same result (no hidden state)
+(function test20() {
+    const deal = makeDeal([makeDealItem("A", 10), makeDealItem("B", 3)]);
+    const inventory = [
+        makeInventory("W1", "A", 6),
+        makeInventory("W2", "A", 6),
+        makeInventory("W1", "B", 1),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1"), makeWarehouse("W2", "W2")];
+    const first = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    const second = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(first, second, "Test20: repeated evaluation is stable");
+})();
+// 21. Empty inventory
+(function test21() {
+    const deal = makeDeal([makeDealItem("A", 5)]);
+    const inventory = [];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test21: single record");
+    assertEqual(result[0].status, "UNAVAILABLE", "Test21: UNAVAILABLE with empty inventory");
+})();
+// 22. Empty warehouse list
+(function test22() {
+    const deal = makeDeal([makeDealItem("A", 5)]);
+    const inventory = [makeInventory("W1", "A", 10)];
+    const warehouses = [];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test22: single record");
+    assertEqual(result[0].warehouseId, "UNASSIGNED", "Test22: UNASSIGNED with no warehouses at all");
+})();
+// 23. Large quantities
+(function test23() {
+    const deal = makeDeal([makeDealItem("A", 5000000)]);
+    const inventory = [
+        makeInventory("W1", "A", 3000000),
+        makeInventory("W2", "A", 3000000),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1"), makeWarehouse("W2", "W2")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.reduce((sum, r) => sum + r.quantity, 0), 5000000, "Test23: large-quantity allocation totals exactly the requirement");
+    assertTrue(result.every((r) => r.status === "ALLOCATED"), "Test23: ALLOCATED for large quantities");
+})();
+// 24. Mixed valid and invalid inventory rows for the same product
+(function test24() {
+    const deal = makeDeal([makeDealItem("A", 10)]);
+    const inventory = [
+        makeInventory("W1", "A", -50),
+        makeInventory("W1", "A", 6),
+        makeInventory("W1", "A", NaN),
+    ];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const result = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
+    assertEqual(result.length, 1, "Test24: single record");
+    assertEqual(result[0].quantity, 6, "Test24: only the valid 6 units counted as usable");
+    assertEqual(result[0].status, "PARTIAL", "Test24: PARTIAL since usable stock is only 6 of 10");
+})();
+// 25. Regression: existing dealEngine end-to-end orchestration still works
+(function test25() {
+    const customer = {
+        id: "cust-1",
+        name: "Acme Co",
+        company: "Acme",
+        email: "a@acme.com",
+        tier: "GOLD",
+        isActive: true,
+        createdAt: "2024-01-01",
+    };
+    const product = {
+        id: "P1",
+        name: "Widget",
         category: "Hardware",
         type: "GOOD",
         billingType: "ONE_TIME",
-        salePrice: 100000,
-        costPrice: 70000,
-        currency: "INR",
+        salePrice: 100,
+        costPrice: 60,
+        currency: "USD",
         isActive: true,
-        createdAt: new Date().toISOString(),
-    },
-    {
-        id: "PROD-WAR-001",
-        name: "Extended Warranty",
-        description: "Three-year extended warranty",
-        category: "Services",
-        type: "SERVICE",
-        billingType: "ONE_TIME",
-        salePrice: 10000,
-        costPrice: 4000,
-        currency: "INR",
-        isActive: true,
-        createdAt: new Date().toISOString(),
-    },
-    {
-        id: "PROD-MAINT-001",
-        name: "Maintenance Service",
-        description: "Annual maintenance package",
-        category: "Services",
-        type: "SERVICE",
-        billingType: "RECURRING",
-        salePrice: 15000,
-        costPrice: 6000,
-        currency: "INR",
-        isActive: true,
-        createdAt: new Date().toISOString(),
-    },
-];
-const rules = [
-    {
-        id: "RULE-GOLD",
-        name: "Gold Customer Limit",
+        createdAt: "2024-01-01",
+    };
+    const rule = {
+        id: "r1",
+        name: "Gold tier",
         customerTier: "GOLD",
         maxDiscountPercent: 15,
         requiresApprovalAbove: 15,
         isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    },
-    {
-        id: "RULE-HARDWARE",
-        name: "Hardware Discount Limit",
-        productCategory: "Hardware",
-        maxDiscountPercent: 15,
-        requiresApprovalAbove: 15,
+        createdAt: "2024-01-01",
+        updatedAt: "2024-01-01",
+    };
+    const deal = makeDeal([makeDealItem("P1", 10)]);
+    deal.discountPercent = 10;
+    const inventory = [makeInventory("W1", "P1", 10)];
+    const warehouses = [makeWarehouse("W1", "W1")];
+    const evaluation = (0, dealEngine_1.evaluateDeal)(deal, customer, [product], [rule], inventory, warehouses);
+    assertEqual(evaluation.status, "APPROVED", "Test25: within-limit discount does not require approval");
+    assertEqual(evaluation.warehouseAllocation[0].status, "ALLOCATED", "Test25: warehouse allocation still flows through dealEngine");
+})();
+// 26. Regression: discountEngine / riskEngine / approvalEngine / upsellEngine untouched behavior
+(function test26() {
+    const customer = {
+        id: "cust-1",
+        name: "Acme Co",
+        company: "Acme",
+        email: "a@acme.com",
+        tier: "SILVER",
         isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    },
-];
-const warehouses = [
-    {
-        id: "WH-MUM",
-        name: "Mumbai Warehouse",
-        location: "Mumbai",
+        createdAt: "2024-01-01",
+    };
+    const product = {
+        id: "P1",
+        name: "Widget",
+        category: "Hardware",
+        type: "GOOD",
+        billingType: "ONE_TIME",
+        salePrice: 100,
+        costPrice: 60,
+        currency: "USD",
         isActive: true,
-        createdAt: new Date().toISOString(),
-    },
-    {
-        id: "WH-PUN",
-        name: "Pune Warehouse",
-        location: "Pune",
+        createdAt: "2024-01-01",
+    };
+    const rule = {
+        id: "r1",
+        name: "Silver tier",
+        customerTier: "SILVER",
+        maxDiscountPercent: 5,
+        requiresApprovalAbove: 5,
         isActive: true,
-        createdAt: new Date().toISOString(),
-    },
-];
-// ============================================================
-// SCENARIO 1 — RISKY DEAL
-// ============================================================
-console.log("\n========================================");
-console.log("SCENARIO 1 — RISKY DEAL");
-console.log("========================================\n");
-const riskyDeal = {
-    id: "DEAL-001",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme Enterprise Laptop Deal",
-    status: "UNDER_REVIEW",
-    items: [
+        createdAt: "2024-01-01",
+        updatedAt: "2024-01-01",
+    };
+    const deal = makeDeal([makeDealItem("P1", 5)]);
+    deal.discountPercent = 20;
+    deal.marginPercent = -5;
+    const { evaluation: discountEvaluation } = (0, discountEngine_1.evaluateDiscount)(deal, customer, [product], [rule]);
+    assertTrue(discountEvaluation.exceeded, "Test26: discount exceeded flag still works");
+    const riskEvaluation = (0, riskEngine_1.evaluateRisk)(deal, discountEvaluation, []);
+    assertTrue(riskEvaluation.riskScore > 0, "Test26: risk engine still scores risk");
+    const approval = (0, approvalEngine_1.determineApproval)(discountEvaluation, riskEvaluation, deal.marginPercent);
+    assertTrue(approval.required, "Test26: negative margin + exceeded discount requires approval");
+    const upsells = (0, upsellEngine_1.generateUpsellRecommendations)(deal, [
+        product,
         {
-            id: "ITEM-001",
-            dealId: "DEAL-001",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 10,
-            unitPrice: 100000,
-            unitCost: 70000,
+            id: "P2",
+            name: "Extended Warranty",
+            category: "Hardware",
+            type: "SERVICE",
             billingType: "ONE_TIME",
-            discountPercent: 18,
-            subtotal: 1000000,
-            total: 820000,
+            salePrice: 20,
+            costPrice: 5,
+            currency: "USD",
+            isActive: true,
+            createdAt: "2024-01-01",
         },
-    ],
-    discountPercent: 18,
-    subtotal: 1000000,
-    discountAmount: 180000,
-    totalAmount: 820000,
-    costAmount: 700000,
-    marginAmount: 120000,
-    marginPercent: 14.63,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const riskyInventory = [
-    {
-        id: "INV-001",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 6,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-    {
-        id: "INV-002",
-        warehouseId: "WH-PUN",
-        productId: "PROD-HW-001",
-        availableQuantity: 2,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-const riskyResult = (0, dealEngine_1.evaluateDeal)(riskyDeal, customer, products, rules, riskyInventory, warehouses);
-console.log(JSON.stringify(riskyResult, null, 2));
-console.log("\n---------- SCENARIO 1 RESULTS ----------\n");
-console.log("Deal ID:", riskyResult.dealId);
-console.log("Status:", riskyResult.status);
-console.log("Risk Score:", riskyResult.riskScore);
-console.log("Risk Level:", riskyResult.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", riskyResult.discount.requested + "%");
-console.log("Allowed:", riskyResult.discount.allowed + "%");
-console.log("Exceeded:", riskyResult.discount.exceeded);
-console.log("Excess:", riskyResult.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", riskyResult.approval.required);
-console.log("Reason:", riskyResult.approval.reason);
-console.log("\nUpsells:");
-console.log(riskyResult.upsells);
-console.log("\nWarehouse Allocation:");
-console.log(riskyResult.warehouseAllocation);
-console.log("\nWarnings:");
-console.log(riskyResult.warnings);
-// ============================================================
-// SCENARIO 2 — HEALTHY DEAL
-// ============================================================
-console.log("\n\n========================================");
-console.log("SCENARIO 2 — HEALTHY DEAL");
-console.log("========================================\n");
-const healthyDeal = {
-    id: "DEAL-002",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme Standard Hardware Deal",
-    status: "UNDER_REVIEW",
-    items: [
-        {
-            id: "ITEM-002",
-            dealId: "DEAL-002",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 5,
-            unitPrice: 100000,
-            unitCost: 70000,
-            billingType: "ONE_TIME",
-            discountPercent: 10,
-            subtotal: 500000,
-            total: 450000,
-        },
-    ],
-    discountPercent: 10,
-    subtotal: 500000,
-    discountAmount: 50000,
-    totalAmount: 450000,
-    costAmount: 350000,
-    marginAmount: 100000,
-    marginPercent: 22.22,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const healthyInventory = [
-    {
-        id: "INV-003",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 10,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-const healthyResult = (0, dealEngine_1.evaluateDeal)(healthyDeal, customer, products, rules, healthyInventory, warehouses);
-console.log(JSON.stringify(healthyResult, null, 2));
-console.log("\n---------- SCENARIO 2 RESULTS ----------\n");
-console.log("Deal ID:", healthyResult.dealId);
-console.log("Status:", healthyResult.status);
-console.log("Risk Score:", healthyResult.riskScore);
-console.log("Risk Level:", healthyResult.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", healthyResult.discount.requested + "%");
-console.log("Allowed:", healthyResult.discount.allowed + "%");
-console.log("Exceeded:", healthyResult.discount.exceeded);
-console.log("Excess:", healthyResult.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", healthyResult.approval.required);
-console.log("Reason:", healthyResult.approval.reason);
-console.log("\nUpsells:");
-console.log(healthyResult.upsells);
-console.log("\nWarehouse Allocation:");
-console.log(healthyResult.warehouseAllocation);
-console.log("\nWarnings:");
-console.log(healthyResult.warnings);
-// ============================================================
-// EXPECTED BUSINESS OUTCOMES
-// ============================================================
-console.log("\n\n========================================");
-console.log("EXPECTED OUTCOMES");
-console.log("========================================\n");
-console.log("Scenario 1:");
-console.log("Expected Status: APPROVAL_REQUIRED");
-console.log("Expected Risk: HIGH");
-console.log("Expected Approval: true");
-console.log("Expected Approver: SALES_MANAGER");
-console.log("Expected Discount: 18% requested / 15% allowed");
-console.log("Expected Warehouse: PARTIAL");
-console.log("\nScenario 2:");
-console.log("Expected Status: APPROVED");
-console.log("Expected Risk: LOW");
-console.log("Expected Approval: false");
-console.log("Expected Warehouse: ALLOCATED");
-// ============================================================
-// SCENARIO 3 — NEGATIVE MARGIN
-// ============================================================
-console.log("\n\n========================================");
-console.log("SCENARIO 3 — NEGATIVE MARGIN");
-console.log("========================================\n");
-const negativeMarginDeal = {
-    id: "DEAL-003",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme Negative Margin Deal",
-    status: "UNDER_REVIEW",
-    items: [
-        {
-            id: "ITEM-003",
-            dealId: "DEAL-003",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 5,
-            unitPrice: 100000,
-            unitCost: 120000,
-            billingType: "ONE_TIME",
-            discountPercent: 10,
-            subtotal: 500000,
-            total: 450000,
-        },
-    ],
-    discountPercent: 10,
-    subtotal: 500000,
-    discountAmount: 50000,
-    totalAmount: 450000,
-    costAmount: 600000,
-    marginAmount: -150000,
-    marginPercent: -33.33,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const negativeMarginInventory = [
-    {
-        id: "INV-004",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 10,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-const negativeMarginResult = (0, dealEngine_1.evaluateDeal)(negativeMarginDeal, customer, products, rules, negativeMarginInventory, warehouses);
-console.log(JSON.stringify(negativeMarginResult, null, 2));
-console.log("\n---------- SCENARIO 3 RESULTS ----------\n");
-console.log("Deal ID:", negativeMarginResult.dealId);
-console.log("Status:", negativeMarginResult.status);
-console.log("Risk Score:", negativeMarginResult.riskScore);
-console.log("Risk Level:", negativeMarginResult.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", negativeMarginResult.discount.requested + "%");
-console.log("Allowed:", negativeMarginResult.discount.allowed + "%");
-console.log("Exceeded:", negativeMarginResult.discount.exceeded);
-console.log("Excess:", negativeMarginResult.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", negativeMarginResult.approval.required);
-console.log("Reason:", negativeMarginResult.approval.reason);
-console.log("\nUpsells:");
-console.log(negativeMarginResult.upsells);
-console.log("\nWarehouse Allocation:");
-console.log(negativeMarginResult.warehouseAllocation);
-console.log("\nWarnings:");
-console.log(negativeMarginResult.warnings);
-// ============================================================
-// SCENARIO 4 — ZERO INVENTORY
-// ============================================================
-console.log("\n\n========================================");
-console.log("SCENARIO 4 — ZERO INVENTORY");
-console.log("========================================\n");
-const zeroInventoryDeal = {
-    id: "DEAL-004",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme Zero Inventory Deal",
-    status: "UNDER_REVIEW",
-    items: [
-        {
-            id: "ITEM-004",
-            dealId: "DEAL-004",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 5,
-            unitPrice: 100000,
-            unitCost: 70000,
-            billingType: "ONE_TIME",
-            discountPercent: 10,
-            subtotal: 500000,
-            total: 450000,
-        },
-    ],
-    discountPercent: 10,
-    subtotal: 500000,
-    discountAmount: 50000,
-    totalAmount: 450000,
-    costAmount: 350000,
-    marginAmount: 100000,
-    marginPercent: 22.22,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const zeroInventory = [
-    {
-        id: "INV-005",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 0,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-const zeroInventoryResult = (0, dealEngine_1.evaluateDeal)(zeroInventoryDeal, customer, products, rules, zeroInventory, warehouses);
-console.log(JSON.stringify(zeroInventoryResult, null, 2));
-console.log("\n---------- SCENARIO 4 RESULTS ----------\n");
-console.log("Deal ID:", zeroInventoryResult.dealId);
-console.log("Status:", zeroInventoryResult.status);
-console.log("Risk Score:", zeroInventoryResult.riskScore);
-console.log("Risk Level:", zeroInventoryResult.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", zeroInventoryResult.discount.requested + "%");
-console.log("Allowed:", zeroInventoryResult.discount.allowed + "%");
-console.log("Exceeded:", zeroInventoryResult.discount.exceeded);
-console.log("Excess:", zeroInventoryResult.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", zeroInventoryResult.approval.required);
-console.log("Reason:", zeroInventoryResult.approval.reason);
-console.log("\nUpsells:");
-console.log(zeroInventoryResult.upsells);
-console.log("\nWarehouse Allocation:");
-console.log(zeroInventoryResult.warehouseAllocation);
-console.log("\nWarnings:");
-console.log(zeroInventoryResult.warnings);
-// ============================================================
-// SCENARIO 5 — NO ACTIVE WAREHOUSES
-// ============================================================
-console.log("\n\n========================================");
-console.log("SCENARIO 5 — NO ACTIVE WAREHOUSES");
-console.log("========================================\n");
-const noActiveWarehousesDeal = {
-    id: "DEAL-005",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme No Active Warehouses Deal",
-    status: "UNDER_REVIEW",
-    items: [
-        {
-            id: "ITEM-005",
-            dealId: "DEAL-005",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 5,
-            unitPrice: 100000,
-            unitCost: 70000,
-            billingType: "ONE_TIME",
-            discountPercent: 10,
-            subtotal: 500000,
-            total: 450000,
-        },
-    ],
-    discountPercent: 10,
-    subtotal: 500000,
-    discountAmount: 50000,
-    totalAmount: 450000,
-    costAmount: 350000,
-    marginAmount: 100000,
-    marginPercent: 22.22,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const noActiveWarehousesInventory = [
-    {
-        id: "INV-006",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 10,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-const noActiveWarehouses = [
-    {
-        id: "WH-MUM",
-        name: "Mumbai Warehouse",
-        location: "Mumbai",
-        isActive: false,
-        createdAt: new Date().toISOString(),
-    },
-    {
-        id: "WH-PUN",
-        name: "Pune Warehouse",
-        location: "Pune",
-        isActive: false,
-        createdAt: new Date().toISOString(),
-    },
-];
-const noActiveWarehousesResult = (0, dealEngine_1.evaluateDeal)(noActiveWarehousesDeal, customer, products, rules, noActiveWarehousesInventory, noActiveWarehouses);
-console.log(JSON.stringify(noActiveWarehousesResult, null, 2));
-console.log("\n---------- SCENARIO 5 RESULTS ----------\n");
-console.log("Deal ID:", noActiveWarehousesResult.dealId);
-console.log("Status:", noActiveWarehousesResult.status);
-console.log("Risk Score:", noActiveWarehousesResult.riskScore);
-console.log("Risk Level:", noActiveWarehousesResult.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", noActiveWarehousesResult.discount.requested + "%");
-console.log("Allowed:", noActiveWarehousesResult.discount.allowed + "%");
-console.log("Exceeded:", noActiveWarehousesResult.discount.exceeded);
-console.log("Excess:", noActiveWarehousesResult.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", noActiveWarehousesResult.approval.required);
-console.log("Reason:", noActiveWarehousesResult.approval.reason);
-console.log("\nUpsells:");
-console.log(noActiveWarehousesResult.upsells);
-console.log("\nWarehouse Allocation:");
-console.log(noActiveWarehousesResult.warehouseAllocation);
-console.log("\nWarnings:");
-console.log(noActiveWarehousesResult.warnings);
-// ============================================================
-// SCENARIO 6 — MISSING CUSTOMER-TIER RULE
-// ============================================================
-console.log("\n\n========================================");
-console.log("SCENARIO 6 — MISSING CUSTOMER-TIER RULE");
-console.log("========================================\n");
-const missingTierRules = [
-    {
-        id: "RULE-HARDWARE",
-        name: "Hardware Discount Limit",
-        productCategory: "Hardware",
-        maxDiscountPercent: 15,
-        requiresApprovalAbove: 15,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-    },
-];
-const missingTierDeal = {
-    id: "DEAL-006",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme Missing Tier Rule Deal",
-    status: "UNDER_REVIEW",
-    items: [
-        {
-            id: "ITEM-006",
-            dealId: "DEAL-006",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 5,
-            unitPrice: 100000,
-            unitCost: 70000,
-            billingType: "ONE_TIME",
-            discountPercent: 10,
-            subtotal: 500000,
-            total: 450000,
-        },
-    ],
-    discountPercent: 10,
-    subtotal: 500000,
-    discountAmount: 50000,
-    totalAmount: 450000,
-    costAmount: 350000,
-    marginAmount: 100000,
-    marginPercent: 22.22,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const missingTierInventory = [
-    {
-        id: "INV-007",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 10,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-const missingTierResult = (0, dealEngine_1.evaluateDeal)(missingTierDeal, customer, products, missingTierRules, missingTierInventory, warehouses);
-console.log(JSON.stringify(missingTierResult, null, 2));
-console.log("\n---------- SCENARIO 6 RESULTS ----------\n");
-console.log("Deal ID:", missingTierResult.dealId);
-console.log("Status:", missingTierResult.status);
-console.log("Risk Score:", missingTierResult.riskScore);
-console.log("Risk Level:", missingTierResult.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", missingTierResult.discount.requested + "%");
-console.log("Allowed:", missingTierResult.discount.allowed + "%");
-console.log("Exceeded:", missingTierResult.discount.exceeded);
-console.log("Excess:", missingTierResult.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", missingTierResult.approval.required);
-console.log("Reason:", missingTierResult.approval.reason);
-console.log("\nUpsells:");
-console.log(missingTierResult.upsells);
-console.log("\nWarehouse Allocation:");
-console.log(missingTierResult.warehouseAllocation);
-console.log("\nWarnings:");
-console.log(missingTierResult.warnings);
-// ============================================================
-// EXPECTED OUTCOMES — SCENARIOS 3-6
-// ============================================================
-console.log("\n\n========================================");
-console.log("EXPECTED OUTCOMES (SCENARIOS 3-6)");
-console.log("========================================\n");
-console.log("Scenario 3 (Negative Margin):");
-console.log("Expected Status: APPROVED");
-console.log("Expected Risk: MEDIUM");
-console.log("Expected Approval: false");
-console.log("Expected Discount: 10% requested / 15% allowed");
-console.log("\nScenario 4 (Zero Inventory):");
-console.log("Expected Status: APPROVED");
-console.log("Expected Risk: MEDIUM");
-console.log("Expected Approval: false");
-console.log("Expected Warehouse: UNAVAILABLE, quantity 0");
-console.log("\nScenario 5 (No Active Warehouses):");
-console.log("Expected Status: APPROVED");
-console.log("Expected Risk: LOW");
-console.log("Expected Approval: false");
-console.log("Expected Warehouse: UNASSIGNED / Unassigned, quantity 0, UNAVAILABLE");
-console.log("\nScenario 6 (Missing Customer-Tier Rule):");
-console.log("Expected Status: APPROVAL_REQUIRED");
-console.log("Expected Risk: MEDIUM");
-console.log("Expected Approval: true");
-console.log("Expected Discount: 10% requested / 0% allowed");
-// ============================================================
-// SCENARIO 7 — RE-EVALUATION AFTER DISCOUNT CHANGE
-// ============================================================
-console.log("\n\n========================================");
-console.log("SCENARIO 7 — RE-EVALUATION AFTER DISCOUNT CHANGE");
-console.log("========================================\n");
-const initialDeal = {
-    id: "DEAL-007",
-    customerId: "CUST-001",
-    salesRepId: "USER-001",
-    title: "Acme Re-Evaluation Deal",
-    status: "UNDER_REVIEW",
-    items: [
-        {
-            id: "ITEM-007",
-            dealId: "DEAL-007",
-            productId: "PROD-HW-001",
-            productName: "Enterprise Laptop",
-            quantity: 10,
-            unitPrice: 100000,
-            unitCost: 70000,
-            billingType: "ONE_TIME",
-            discountPercent: 18,
-            subtotal: 1000000,
-            total: 820000,
-        },
-    ],
-    discountPercent: 18,
-    subtotal: 1000000,
-    discountAmount: 180000,
-    totalAmount: 820000,
-    costAmount: 700000,
-    marginAmount: 120000,
-    marginPercent: 14.63,
-    riskScore: 0,
-    riskLevel: "LOW",
-    currency: "INR",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
-const reevaluationInventory = [
-    {
-        id: "INV-008",
-        warehouseId: "WH-MUM",
-        productId: "PROD-HW-001",
-        availableQuantity: 6,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-    {
-        id: "INV-009",
-        warehouseId: "WH-PUN",
-        productId: "PROD-HW-001",
-        availableQuantity: 2,
-        reservedQuantity: 0,
-        updatedAt: new Date().toISOString(),
-    },
-];
-// ---------- STEP 1 — INITIAL EVALUATION ----------
-const initialEvaluation = (0, dealEngine_1.evaluateDeal)(initialDeal, customer, products, rules, reevaluationInventory, warehouses);
-console.log("---------- INITIAL EVALUATION (FULL) ----------\n");
-console.log(JSON.stringify(initialEvaluation, null, 2));
-console.log("\n---------- INITIAL EVALUATION RESULTS ----------\n");
-console.log("Deal ID:", initialEvaluation.dealId);
-console.log("Status:", initialEvaluation.status);
-console.log("Risk Score:", initialEvaluation.riskScore);
-console.log("Risk Level:", initialEvaluation.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", initialEvaluation.discount.requested + "%");
-console.log("Allowed:", initialEvaluation.discount.allowed + "%");
-console.log("Exceeded:", initialEvaluation.discount.exceeded);
-console.log("Excess:", initialEvaluation.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", initialEvaluation.approval.required);
-console.log("Reason:", initialEvaluation.approval.reason);
-// ---------- STEP 2 — MODIFY THE DEAL (NEW OBJECT, ORIGINAL NOT MUTATED) ----------
-const updatedDeal = {
-    ...initialDeal,
-    items: initialDeal.items.map((item) => ({
-        ...item,
-        discountPercent: 10,
-        total: 900000,
-    })),
-    discountPercent: 10,
-    subtotal: 1000000,
-    discountAmount: 100000,
-    totalAmount: 900000,
-    costAmount: 700000,
-    marginAmount: 200000,
-    marginPercent: 22.22,
-};
-// ---------- STEP 3 — RE-EVALUATE USING THE SAME evaluateDeal() ----------
-const reevaluatedEvaluation = (0, dealEngine_1.evaluateDeal)(updatedDeal, customer, products, rules, reevaluationInventory, warehouses);
-console.log("\n\n---------- RE-EVALUATED (FULL) ----------\n");
-console.log(JSON.stringify(reevaluatedEvaluation, null, 2));
-console.log("\n---------- RE-EVALUATED RESULTS ----------\n");
-console.log("Deal ID:", reevaluatedEvaluation.dealId);
-console.log("Status:", reevaluatedEvaluation.status);
-console.log("Risk Score:", reevaluatedEvaluation.riskScore);
-console.log("Risk Level:", reevaluatedEvaluation.riskLevel);
-console.log("\nDiscount:");
-console.log("Requested:", reevaluatedEvaluation.discount.requested + "%");
-console.log("Allowed:", reevaluatedEvaluation.discount.allowed + "%");
-console.log("Exceeded:", reevaluatedEvaluation.discount.exceeded);
-console.log("Excess:", reevaluatedEvaluation.discount.excessPercent + "%");
-console.log("\nApproval:");
-console.log("Required:", reevaluatedEvaluation.approval.required);
-console.log("Reason:", reevaluatedEvaluation.approval.reason);
-console.log("\nWarehouse Allocation:");
-console.log(reevaluatedEvaluation.warehouseAllocation);
-// ---------- STEP 4 — EXPLICITLY PROVE THE STATE CHANGED ----------
-console.log("\n\n---------- STATE COMPARISON ----------\n");
-console.log("INITIAL EVALUATION:");
-console.log("Discount:", initialEvaluation.discount);
-console.log("Risk Score:", initialEvaluation.riskScore);
-console.log("Risk Level:", initialEvaluation.riskLevel);
-console.log("Status:", initialEvaluation.status);
-console.log("Approval Required:", initialEvaluation.approval.required);
-console.log("\nRE-EVALUATED:");
-console.log("Discount:", reevaluatedEvaluation.discount);
-console.log("Risk Score:", reevaluatedEvaluation.riskScore);
-console.log("Risk Level:", reevaluatedEvaluation.riskLevel);
-console.log("Status:", reevaluatedEvaluation.status);
-console.log("Approval Required:", reevaluatedEvaluation.approval.required);
-console.log("\nCHECKS:");
-console.log(`Discount changed from ${initialDeal.discountPercent}% to ${updatedDeal.discountPercent}%`);
-console.log("Initial discount exceeded =", initialEvaluation.discount.exceeded);
-console.log("Re-evaluated discount exceeded =", reevaluatedEvaluation.discount.exceeded);
-console.log("Initial status =", initialEvaluation.status);
-console.log("Re-evaluated status =", reevaluatedEvaluation.status);
-console.log("Initial approval required =", initialEvaluation.approval.required);
-console.log("Re-evaluated approval required =", reevaluatedEvaluation.approval.required);
-// ============================================================
-// EXPECTED OUTCOMES — SCENARIO 7
-// ============================================================
-console.log("\n\n========================================");
-console.log("EXPECTED OUTCOMES (SCENARIO 7)");
-console.log("========================================\n");
-console.log("Initial Evaluation:");
-console.log("Expected Status: APPROVAL_REQUIRED");
-console.log("Expected Risk Score: 64");
-console.log("Expected Risk Level: HIGH");
-console.log("Expected Discount: 18% requested / 15% allowed, exceeded=true, excess=3%");
-console.log("Expected Approval Required: true");
-console.log("\nRe-Evaluated (after discountPercent 18 -> 10):");
-console.log("Expected Discount: 10% requested / 15% allowed, exceeded=false, excess=0%");
-console.log("Expected Inventory Risk: 15 (10 requested, 8 available)");
-console.log("Expected Status: APPROVED");
-console.log("Expected Approval Required: false");
-console.log("Expected Warehouse Allocation: Mumbai 6 + Pune 2 = 8 total, status PARTIAL");
+    ]);
+    assertEqual(upsells.length, 1, "Test26: upsell engine still recommends related products");
+})();
+// ---------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------
+console.log(`\nPassed: ${passed}, Failed: ${failed}`);
+if (failures.length > 0) {
+    console.log("\nFailures:\n" + failures.join("\n\n"));
+    // Signal failure to the caller without depending on @types/node being
+    // installed in the consuming project (process is a Node global, but its
+    // *type* declarations are a separate, optional dependency).
+    globalThis.process ? (globalThis.process.exitCode = 1) : undefined;
+}

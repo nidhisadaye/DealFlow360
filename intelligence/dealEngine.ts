@@ -68,7 +68,8 @@ export function evaluateDeal(
 
   const approvalDecision = determineApproval(
     discountEvaluation,
-    riskEvaluation
+    riskEvaluation,
+    deal.marginPercent
   );
 
   const status = determineStatus(approvalDecision);
