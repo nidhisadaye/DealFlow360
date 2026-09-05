@@ -77,10 +77,10 @@ function MainLayout() {
   const renderPage = () => {
     switch (activePage) {
       case "Deals":
-        return <Deals />;
+        return <Deals onCreateDeal={() => handleNavigation("Deal Builder")} />;
 
       case "Deal Builder":
-        return <DealBuilder />;
+        return <DealBuilder onBack={() => handleNavigation("Deals")} />;
 
       case "Approvals":
         return <Approvals />;

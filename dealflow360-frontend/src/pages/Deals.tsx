@@ -76,7 +76,7 @@ const riskClass: Record<string, string> = {
   High: "risk-high",
 };
 
-function Deals() {
+function Deals({ onCreateDeal }: { onCreateDeal: () => void }) {
   return (
     <div className="page-container">
       <div className="page-header">
@@ -89,7 +89,7 @@ function Deals() {
           </p>
         </div>
 
-        <button className="primary-button">
+        <button className="primary-button" onClick={onCreateDeal}>
           <Plus size={18} />
           Create Deal
         </button>

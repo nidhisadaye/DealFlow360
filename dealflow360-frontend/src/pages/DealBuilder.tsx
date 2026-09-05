@@ -8,6 +8,8 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { useState } from "react";
+
 const products = [
   {
     name: "Enterprise Laptop",
@@ -23,7 +25,47 @@ const products = [
   },
 ];
 
-function DealBuilder() {
+function DealBuilder({ onBack }: { onBack: () => void }) {
+      const [isEvaluating, setIsEvaluating] = useState(false);
+
+  const handleEvaluateDeal = async () => {
+    setIsEvaluating(true);
+
+    try {
+      const response = await fetch("http://localhost:5000/api/deals/evaluate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customer: "Tata Technologies",
+          customerTier: "GOLD",
+          dealName: "Enterprise Device Modernization",
+          products,
+          requestedDiscount: 18,
+          paymentTerms: "Net 30",
+          billingType: "Hybrid",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Deal evaluation failed");
+      }
+
+      alert(JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error("Deal evaluation error:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to connect to Deal Engine."
+      );
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
   const subtotal = products.reduce(
     (total, product) => total + product.price * product.quantity,
     0
@@ -36,7 +78,7 @@ function DealBuilder() {
     <div className="page-container">
       <div className="deal-builder-header">
         <div>
-          <button className="back-button">
+          <button className="back-button" onClick={onBack}>
             <ArrowLeft size={17} />
             Back to Deals
           </button>
@@ -76,10 +118,13 @@ function DealBuilder() {
 
               <div className="form-field">
                 <label>Customer Tier</label>
-                <div className="select-field">
-                  <span>GOLD</span>
-                  <ChevronDown size={16} />
-                </div>
+                <button
+                    className="select-field"
+                    onClick={() => alert("Customer tier selection will open here.")}
+                >
+                    <span>GOLD</span>
+                    <ChevronDown size={16} />
+                </button>
               </div>
 
               <div className="form-field">
@@ -104,10 +149,13 @@ function DealBuilder() {
                 <p>Add products that should be included in this quotation.</p>
               </div>
 
-              <button className="secondary-button">
+              <button
+                className="secondary-button"
+                onClick={() => alert("Product selection will be added here.")}
+            >
                 <Plus size={16} />
                 Add Product
-              </button>
+            </button>
             </div>
 
             <div className="product-list">
@@ -144,9 +192,13 @@ function DealBuilder() {
                     </strong>
                   </div>
 
-                  <button className="delete-button">
+                  <button
+                    className="delete-button"
+                    onClick={() => alert(`Remove ${product.name} from quotation?`)}
+                    title={`Remove ${product.name}`}
+                >
                     <Trash2 size={17} />
-                  </button>
+                </button>
                 </div>
               ))}
             </div>
@@ -174,19 +226,34 @@ function DealBuilder() {
 
               <div className="form-field">
                 <label>Payment Terms</label>
-                <div className="select-field">
-                  <span>Net 30</span>
-                  <ChevronDown size={16} />
-                </div>
+                <button
+                    className="select-field"
+                    onClick={() => alert("Customer selection will open here.")}
+                >
+                    <span>Tata Technologies</span>
+                    <ChevronDown size={16} />
+                </button>
               </div>
 
               <div className="form-field">
                 <label>Billing Type</label>
-                <div className="select-field">
-                  <span>Hybrid</span>
-                  <ChevronDown size={16} />
-                </div>
+                <button
+                    className="select-field"
+                    onClick={() => alert("Payment terms selection will open here.")}
+                >
+                    <span>Net 30</span>
+                    <ChevronDown size={16} />
+                </button>
               </div>
+            </div>
+            <div>
+            <button
+                className="select-field"
+                onClick={() => alert("Billing type selection will open here.")}
+            >
+                <span>Hybrid</span>
+                <ChevronDown size={16} />
+            </button>
             </div>
           </section>
         </main>
@@ -230,11 +297,20 @@ function DealBuilder() {
               </div>
             </div>
 
-            <button className="evaluate-button">
-              Evaluate Deal
+            <button
+                className="evaluate-button"
+                onClick={handleEvaluateDeal}
+                disabled={isEvaluating}
+            >
+                {isEvaluating ? "Evaluating..." : "Evaluate Deal"}
             </button>
 
-            <button className="save-draft-button">Save Draft</button>
+            <button
+                className="save-draft-button"
+                onClick={() => alert("Deal draft saved successfully!")}
+            >
+                Save Draft
+            </button>
           </div>
 
           <div className="builder-tip-card">
