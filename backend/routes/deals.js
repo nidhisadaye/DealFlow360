@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
+const logEvent = require('../utils/logEvent');
 
 const router = express.Router();
 
@@ -55,6 +56,7 @@ router.post('/', authenticate, async (req, res) => {
       );
     }
 
+    await logEvent(dealId, 'DEAL_CREATED', salesRepId, `Deal "${title}" created.`, null, conn);
     await conn.commit();
     conn.release();
 
