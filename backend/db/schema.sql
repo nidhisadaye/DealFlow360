@@ -55,6 +55,29 @@ CREATE TABLE users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE discount_rules (
+  id VARCHAR(20) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  customer_tier ENUM('BRONZE', 'SILVER', 'GOLD'),
+  product_category VARCHAR(100),
+  max_discount_percent DECIMAL(5,2) NOT NULL,
+  requires_approval_above DECIMAL(5,2) NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE upsell_rules (
+  id VARCHAR(20) PRIMARY KEY,
+  source_category VARCHAR(100) NOT NULL,
+  target_name_keywords JSON NOT NULL,
+  reason VARCHAR(500) NOT NULL,
+  confidence DECIMAL(4,3) NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS deals (
   id VARCHAR(40) PRIMARY KEY,
   customer_id VARCHAR(20) NOT NULL,
@@ -92,6 +115,15 @@ CREATE TABLE IF NOT EXISTS deal_items (
   total DECIMAL(12,2) NOT NULL,
   FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
+CREATE TABLE IF NOT EXISTS deal_warehouses (
+  deal_id VARCHAR(20) NOT NULL,
+  warehouse_id VARCHAR(20) NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (deal_id, warehouse_id),
+  FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE,
+  FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
 );
 
 CREATE TABLE IF NOT EXISTS approval_requests (
