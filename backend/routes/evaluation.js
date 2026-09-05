@@ -75,12 +75,16 @@ function mapWarehouse(row) {
 }
 
 function mapInventory(row) {
+  const availableQuantity = toNumber(row.available_quantity);
+  const reservedQuantity = toNumber(row.reserved_quantity);
+
   return {
     id: row.id,
     warehouseId: row.warehouse_id,
     productId: row.product_id,
-    availableQuantity: toNumber(row.available_quantity),
-    reservedQuantity: toNumber(row.reserved_quantity),
+    // The intelligence layer receives sellable stock, not physical stock.
+    availableQuantity: Math.max(availableQuantity - reservedQuantity, 0),
+    reservedQuantity,
     updatedAt:
       row.updated_at instanceof Date
         ? row.updated_at.toISOString()
@@ -143,11 +147,23 @@ function notFound(message) {
   return err;
 }
 
+function toPublicEvaluation(evaluation) {
+  return {
+    ...evaluation,
+    discount: {
+      requested: evaluation.discount.requested,
+      allowed: evaluation.discount.allowed,
+      exceeded: evaluation.discount.exceeded,
+      excessPercent: evaluation.discount.excessPercent,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/deals/:id/evaluate
 // ---------------------------------------------------------------------------
 
-router.post("/deals/:id/evaluate", authenticate, async (req, res) => {
+const evaluateDealRoute = async (req, res) => {
   const dealId = req.params.id;
 
   try {
@@ -398,7 +414,7 @@ router.post("/deals/:id/evaluate", authenticate, async (req, res) => {
 
     return res.json({
       success: true,
-      data: evaluation,
+      data: toPublicEvaluation(evaluation),
     });
   } catch (err) {
     // ---------------------------------------------------------------
@@ -432,6 +448,8 @@ router.post("/deals/:id/evaluate", authenticate, async (req, res) => {
       },
     });
   }
-});
+};
+
+router.post("/deals/:id/evaluate", authenticate, evaluateDealRoute);
 
 module.exports = router;

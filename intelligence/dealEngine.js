@@ -18,7 +18,7 @@ function determineStatus(approval) {
 function evaluateDeal(deal, customer, products, rules, inventory, warehouses, upsellRules) {
     const { evaluation: discountEvaluation, reasons: discountReasons } = (0, discountEngine_1.evaluateDiscount)(deal, customer, products, rules);
     const riskEvaluation = (0, riskEngine_1.evaluateRisk)(deal, discountEvaluation, inventory);
-    const approvalDecision = (0, approvalEngine_1.determineApproval)(discountEvaluation, riskEvaluation);
+    const approvalDecision = (0, approvalEngine_1.determineApproval)(discountEvaluation, riskEvaluation, deal.marginPercent);
     const status = determineStatus(approvalDecision);
     const warnings = mergeWarnings(discountReasons, riskEvaluation);
     const upsells = (0, upsellEngine_1.generateUpsellRecommendations)(deal, products, upsellRules);
