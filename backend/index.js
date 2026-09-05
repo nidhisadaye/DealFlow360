@@ -16,6 +16,7 @@ const approvalRoutes = require('./routes/approvals');
 const warehouseRoutes = require('./routes/warehouses');
 const billingRoutes = require('./routes/billing');
 const negotiationRoutes = require('./routes/negotiations');
+const reportRoutes = require('./routes/reports');
 
 app.get('/', (req, res) => {
   res.json({ success: true, data: { message: 'DealFlow360 backend running' } });
@@ -38,6 +39,8 @@ app.use('/api', approvalRoutes);
 app.use('/api', warehouseRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', negotiationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/DealFlow360_Project_Report.pdf', reportRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
