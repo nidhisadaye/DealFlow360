@@ -34,7 +34,7 @@ router.post('/signup', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const id = `USR-${Date.now()}`;
+    const id = `USR-${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
     await pool.query(
       'INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',

@@ -15,13 +15,13 @@ function mergeWarnings(discountReasons, riskEvaluation) {
 function determineStatus(approval) {
     return approval.required ? "APPROVAL_REQUIRED" : "APPROVED";
 }
-function evaluateDeal(deal, customer, products, rules, inventory, warehouses) {
+function evaluateDeal(deal, customer, products, rules, inventory, warehouses, upsellRules) {
     const { evaluation: discountEvaluation, reasons: discountReasons } = (0, discountEngine_1.evaluateDiscount)(deal, customer, products, rules);
     const riskEvaluation = (0, riskEngine_1.evaluateRisk)(deal, discountEvaluation, inventory);
     const approvalDecision = (0, approvalEngine_1.determineApproval)(discountEvaluation, riskEvaluation);
     const status = determineStatus(approvalDecision);
     const warnings = mergeWarnings(discountReasons, riskEvaluation);
-    const upsells = (0, upsellEngine_1.generateUpsellRecommendations)(deal, products);
+    const upsells = (0, upsellEngine_1.generateUpsellRecommendations)(deal, products, upsellRules);
     const warehouseAllocation = (0, warehouseEngine_1.allocateWarehouseInventory)(deal, inventory, warehouses);
     return {
         dealId: deal.id,

@@ -14,8 +14,8 @@ import {
 import { DiscountEvaluation, evaluateDiscount } from "./discountEngine";
 import { RiskEvaluation, evaluateRisk } from "./riskEngine";
 import { ApprovalDecision, determineApproval } from "./approvalEngine";
-import { generateUpsellRecommendations } from "./upsellEngine";
 import { allocateWarehouseInventory } from "./warehouseEngine";
+import { UpsellRule, generateUpsellRecommendations } from "./upsellEngine";
 
 export interface DealEvaluation {
   dealId: string;
@@ -54,7 +54,8 @@ export function evaluateDeal(
   products: Product[],
   rules: DiscountRule[],
   inventory: Inventory[],
-  warehouses: Warehouse[]
+  warehouses: Warehouse[],
+  upsellRules?: UpsellRule[]
 ): DealEvaluation {
   const { evaluation: discountEvaluation, reasons: discountReasons } =
     evaluateDiscount(deal, customer, products, rules);
@@ -74,7 +75,7 @@ export function evaluateDeal(
 
   const warnings = mergeWarnings(discountReasons, riskEvaluation);
 
-  const upsells = generateUpsellRecommendations(deal, products);
+  const upsells = generateUpsellRecommendations(deal, products, upsellRules);
 
   const warehouseAllocation = allocateWarehouseInventory(
     deal,

@@ -17,14 +17,14 @@ import {
  * This structure is intentionally data-driven so the rule set can later be
  * moved into backend configuration without changing the engine logic.
  */
-interface UpsellRule {
+export interface UpsellRule {
   sourceCategory: string;
   targetNameKeywords: string[];
   reason: string;
   confidence: number;
 }
 
-const UPSELL_RULES: UpsellRule[] = [
+const DEFAULT_UPSELL_RULES: UpsellRule[] = [
   {
     sourceCategory: "Hardware",
     targetNameKeywords: ["extended warranty"],
@@ -98,7 +98,8 @@ function buildRecommendation(
 
 export function generateUpsellRecommendations(
   deal: Deal,
-  products: Product[]
+  products: Product[],
+  rules: UpsellRule[] = DEFAULT_UPSELL_RULES
 ): UpsellRecommendation[] {
   const productsById = new Map<string, Product>(
     products.map((product) => [product.id, product])
@@ -121,7 +122,7 @@ export function generateUpsellRecommendations(
   const recommendations: UpsellRecommendation[] = [];
   const recommendedProductIds = new Set<string>();
 
-  for (const rule of UPSELL_RULES) {
+  for (const rule of rules) {
     if (!dealCategories.has(normalizeCategory(rule.sourceCategory))) {
       continue;
     }

@@ -19,6 +19,33 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
+    const productIds = [...new Set(items.map((item) => item.productId))];
+    if (productIds.some((productId) => !productId)) {
+      conn.release();
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Each item must reference a product.' },
+      });
+    }
+
+    const placeholders = productIds.map(() => '?').join(', ');
+    const [productRows] = await conn.query(
+      `SELECT id, name, billing_type, sale_price, cost_price
+       FROM products
+       WHERE id IN (${placeholders}) AND is_active = TRUE`,
+      productIds
+    );
+    const productsById = new Map(productRows.map((product) => [product.id, product]));
+    const missingProduct = productIds.find((productId) => !productsById.has(productId));
+
+    if (missingProduct) {
+      conn.release();
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: `Active product ${missingProduct} was not found.` },
+      });
+    }
+
     await conn.beginTransaction();
 
     const dealId = `DEAL-${Date.now()}`;
@@ -27,9 +54,33 @@ router.post('/', authenticate, async (req, res) => {
     let subtotal = 0;
     let costAmount = 0;
 
-    for (const item of items) {
-      subtotal += item.unitPrice * item.quantity;
-      costAmount += item.unitCost * item.quantity;
+    const normalizedItems = items.map((item) => {
+      const product = productsById.get(item.productId);
+      const quantity = Number(item.quantity);
+
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new Error(`Quantity for product ${item.productId} must be a positive integer.`);
+      }
+
+      const unitPrice = Number(product.sale_price);
+      const unitCost = Number(product.cost_price);
+      subtotal += unitPrice * quantity;
+      costAmount += unitCost * quantity;
+
+      return {
+        ...item,
+        productName: product.name,
+        quantity,
+        unitPrice,
+        unitCost,
+        billingType: product.billing_type,
+      };
+    });
+
+    for (const item of normalizedItems) {
+      if (item.discountPercent !== undefined && (Number(item.discountPercent) < 0 || Number(item.discountPercent) > 100)) {
+        throw new Error(`Discount for product ${item.productId} must be between 0 and 100.`);
+      }
     }
 
     const discountAmount = subtotal * ((discountPercent || 0) / 100);
@@ -43,7 +94,7 @@ router.post('/', authenticate, async (req, res) => {
       [dealId, customerId, salesRepId, title, discountPercent || 0, subtotal, discountAmount, totalAmount, costAmount, marginAmount, marginPercent]
     );
 
-    for (const item of items) {
+    for (const item of normalizedItems) {
       const itemId = `DI-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const itemSubtotal = item.unitPrice * item.quantity;
       const itemDiscount = itemSubtotal * ((item.discountPercent || 0) / 100);

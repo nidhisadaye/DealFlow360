@@ -1,32 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateUpsellRecommendations = generateUpsellRecommendations;
-const UPSELL_RULES = [
-    {
-        sourceCategory: "Hardware",
-        targetNameKeywords: ["extended warranty"],
-        reason: "Recommended protection for hardware purchase.",
-        confidence: 0.9,
-    },
-    {
-        sourceCategory: "Hardware",
-        targetNameKeywords: ["maintenance service"],
-        reason: "Recommended maintenance service for hardware.",
-        confidence: 0.75,
-    },
-    {
-        sourceCategory: "Software",
-        targetNameKeywords: ["implementation service"],
-        reason: "Recommended implementation support for software.",
-        confidence: 0.9,
-    },
-    {
-        sourceCategory: "Software",
-        targetNameKeywords: ["support service"],
-        reason: "Recommended support coverage for software.",
-        confidence: 0.75,
-    },
-];
 const UPSELL_QUANTITY = 1;
 function normalizeCategory(category) {
     return category.trim().toLowerCase();
@@ -55,7 +29,33 @@ function buildRecommendation(candidate, rule) {
         confidence: rule.confidence,
     };
 }
-function generateUpsellRecommendations(deal, products) {
+const DEFAULT_UPSELL_RULES = [
+    {
+        sourceCategory: "Hardware",
+        targetNameKeywords: ["extended warranty"],
+        reason: "Recommended protection for hardware purchase.",
+        confidence: 0.9,
+    },
+    {
+        sourceCategory: "Hardware",
+        targetNameKeywords: ["maintenance service"],
+        reason: "Recommended maintenance service for hardware.",
+        confidence: 0.75,
+    },
+    {
+        sourceCategory: "Software",
+        targetNameKeywords: ["implementation service"],
+        reason: "Recommended implementation support for software.",
+        confidence: 0.9,
+    },
+    {
+        sourceCategory: "Software",
+        targetNameKeywords: ["support service"],
+        reason: "Recommended support coverage for software.",
+        confidence: 0.75,
+    },
+];
+function generateUpsellRecommendations(deal, products, rules = DEFAULT_UPSELL_RULES) {
     const productsById = new Map(products.map((product) => [product.id, product]));
     const dealProductIds = new Set(deal.items.map((item) => item.productId));
     const dealCategories = new Set();
@@ -67,7 +67,7 @@ function generateUpsellRecommendations(deal, products) {
     }
     const recommendations = [];
     const recommendedProductIds = new Set();
-    for (const rule of UPSELL_RULES) {
+    for (const rule of rules) {
         if (!dealCategories.has(normalizeCategory(rule.sourceCategory))) {
             continue;
         }
