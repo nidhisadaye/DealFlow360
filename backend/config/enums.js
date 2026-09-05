@@ -44,6 +44,19 @@ const ApprovalStatus = Object.freeze({
   REJECTED: 'REJECTED',
 });
 
+const InvoiceStatus = Object.freeze({
+  DRAFT: 'DRAFT',
+  ISSUED: 'ISSUED',
+  PAID: 'PAID',
+  OVERDUE: 'OVERDUE',
+});
+
+const SubscriptionStatus = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  CANCELLED: 'CANCELLED',
+});
+
 const RiskLevel = Object.freeze({
   LOW: 'LOW',
   MEDIUM: 'MEDIUM',
@@ -89,6 +102,8 @@ module.exports = {
   BillingType,
   DealStatus,
   ApprovalStatus,
+  InvoiceStatus,
+  SubscriptionStatus,
   RiskLevel,
   DealEventType,
   VALID_TRANSITIONS,

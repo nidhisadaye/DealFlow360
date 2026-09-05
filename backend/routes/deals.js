@@ -68,11 +68,33 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/deals — list all deals
+// GET /api/deals — list all deals with pagination
 router.get('/', authenticate, async (req, res) => {
   try {
-    const [deals] = await pool.query('SELECT * FROM deals ORDER BY created_at DESC');
-    res.json({ success: true, data: deals, meta: { total: deals.length } });
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM deals');
+    const [deals] = await pool.query(
+      'SELECT * FROM deals ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      [limit, offset]
+    );
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    res.json({
+      success: true,
+      data: deals,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
   }

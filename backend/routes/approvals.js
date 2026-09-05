@@ -7,7 +7,7 @@ const logEvent = require('../utils/logEvent');
 const router = express.Router();
 
 // GET /api/approvals — list all approval requests
-router.get('/', authenticate, async (req, res) => {
+router.get('/approvals', authenticate, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM approval_requests ORDER BY created_at DESC');
     res.json({ success: true, data: rows, meta: { total: rows.length } });
