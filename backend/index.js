@@ -1,3 +1,4 @@
+const chatbotRoutes = require('./routes/chatbot');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -5,29 +6,52 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/api/chatbot', chatbotRoutes);
 
 const pool = require('./config/db');
 const { DealStatus } = require('./config/enums');
+
 const authRoutes = require('./routes/auth');
 const dealRoutes = require('./routes/deals');
 const customerRoutes = require('./routes/customers');
 const productRoutes = require('./routes/products');
 const approvalRoutes = require('./routes/approvals');
+
 const warehouseRoutes = require('./routes/warehouses');
 const billingRoutes = require('./routes/billing');
 const negotiationRoutes = require('./routes/negotiations');
 const reportRoutes = require('./routes/reports');
+const evaluationRoutes = require('./routes/evaluation');
+
 
 app.get('/', (req, res) => {
-  res.json({ success: true, data: { message: 'DealFlow360 backend running' } });
+  res.json({
+    success: true,
+    data: {
+      message: 'DealFlow360 backend running',
+    },
+  });
 });
 
 app.get('/api/health', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT 1 + 1 AS result');
-    res.json({ success: true, data: { db: 'connected', result: rows[0].result } });
+
+    res.json({
+      success: true,
+      data: {
+        db: 'connected',
+        result: rows[0].result,
+      },
+    });
   } catch (err) {
-    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: err.message,
+      },
+    });
   }
 });
 
@@ -42,5 +66,12 @@ app.use('/api', negotiationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/DealFlow360_Project_Report.pdf', reportRoutes);
 
+// Intelligence evaluation route
+// POST /api/deals/:id/evaluate
+app.use('/api', evaluationRoutes);
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

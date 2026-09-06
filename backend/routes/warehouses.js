@@ -28,7 +28,8 @@ router.get('/products/:id/inventory', authenticate, async (req, res) => {
 
     const [rows] = await pool.query(
       `SELECT i.warehouse_id AS warehouseId, w.name AS warehouseName,
-              i.available_quantity AS availableQuantity, i.reserved_quantity AS reservedQuantity,
+              GREATEST(i.available_quantity - i.reserved_quantity, 0) AS availableQuantity,
+              i.reserved_quantity AS reservedQuantity,
               i.updated_at AS updatedAt
        FROM inventory i
        JOIN warehouses w ON w.id = i.warehouse_id
@@ -72,12 +73,26 @@ router.post('/deals/:id/allocate', authenticate, async (req, res) => {
 
     for (const alloc of allocations) {
       const { warehouseId, warehouseName, productId, quantity, status } = alloc;
+      const requestedQuantity = Number(quantity);
 
-      if (!warehouseId || !warehouseName || !productId || !quantity || !status) {
+      if (!warehouseId || !warehouseName || !productId || !Number.isInteger(requestedQuantity) || requestedQuantity <= 0 || !status) {
         throw Object.assign(
           new Error('Each allocation needs warehouseId, warehouseName, productId, quantity, and status.'),
           { code: 'VALIDATION_ERROR' }
         );
+      }
+
+      const [inventoryRows] = await conn.query(
+        `SELECT available_quantity, reserved_quantity FROM inventory
+         WHERE warehouse_id = ? AND product_id = ? FOR UPDATE`,
+        [warehouseId, productId]
+      );
+      const inventory = inventoryRows[0];
+      const sellableQuantity = inventory
+        ? Number(inventory.available_quantity) - Number(inventory.reserved_quantity)
+        : 0;
+      if (status === 'ALLOCATED' && requestedQuantity > sellableQuantity) {
+        throw Object.assign(new Error(`Only ${Math.max(sellableQuantity, 0)} unit(s) are available at this warehouse.`), { code: 'VALIDATION_ERROR' });
       }
 
       const allocationId = `WA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -85,19 +100,19 @@ router.post('/deals/:id/allocate', authenticate, async (req, res) => {
       await conn.query(
         `INSERT INTO warehouse_allocations (id, deal_id, warehouse_id, warehouse_name, product_id, quantity, status)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [allocationId, dealId, warehouseId, warehouseName, productId, quantity, status]
+        [allocationId, dealId, warehouseId, warehouseName, productId, requestedQuantity, status]
       );
 
       if (status === 'ALLOCATED' || status === 'PARTIAL') {
         await conn.query(
           `UPDATE inventory
-           SET reserved_quantity = GREATEST(0, reserved_quantity - ?)
+          SET reserved_quantity = reserved_quantity + ?
            WHERE warehouse_id = ? AND product_id = ?`,
-          [quantity, warehouseId, productId]
+          [requestedQuantity, warehouseId, productId]
         );
       }
 
-      insertedRows.push({ id: allocationId, warehouseId, warehouseName, productId, quantity, status });
+      insertedRows.push({ id: allocationId, warehouseId, warehouseName, productId, quantity: requestedQuantity, status });
     }
 
     const allFullyAllocated = allocations.every((a) => a.status === 'ALLOCATED');

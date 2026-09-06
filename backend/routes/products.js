@@ -23,4 +23,79 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+router.post('/', async (req, res) => {
+  try {
+    const {
+      id,
+      name,
+      description,
+      category,
+      type,
+      billing_type,
+      sale_price,
+      cost_price,
+      currency,
+    } = req.body;
+
+    if (
+      !id ||
+      !name ||
+      !category ||
+      !type ||
+      !billing_type ||
+      sale_price === undefined ||
+      cost_price === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'id, name, category, type, billing_type, sale_price and cost_price are required.',
+        },
+      });
+    }
+
+    await pool.query(
+      `INSERT INTO products
+       (id, name, description, category, type, billing_type, sale_price, cost_price, currency, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      [
+        id,
+        name,
+        description || null,
+        category,
+        type,
+        billing_type,
+        sale_price,
+        cost_price,
+        currency || 'INR',
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id,
+        name,
+        description: description || null,
+        category,
+        type,
+        billing_type,
+        sale_price,
+        cost_price,
+        currency: currency || 'INR',
+        is_active: true,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: err.message,
+      },
+    });
+  }
+});
+
 module.exports = router;
