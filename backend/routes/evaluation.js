@@ -5,6 +5,7 @@ const db = require("../config/db");
 const { authenticate } = require("../middleware/auth");
 const logEvent = require("../utils/logEvent");
 const { DealEventType } = require("../config/enums");
+const { getDiscountRules } = require("../config/discountrules");
 
 const { evaluateDeal } = require("../../intelligence/dealEngine");
 
@@ -275,12 +276,15 @@ const evaluateDealRoute = async (req, res) => {
        FROM discount_rules
        WHERE is_active = TRUE`
     );
-    const rules = ruleRows.map((rule) => ({
+    const databaseRules = ruleRows.map((rule) => ({
       ...rule,
       maxDiscountPercent: toNumber(rule.maxDiscountPercent),
       requiresApprovalAbove: toNumber(rule.requiresApprovalAbove),
       isActive: !!rule.isActive,
     }));
+    // A clean development database may not yet contain policy rows. Keep the
+    // intelligence path usable with the shared, versioned baseline rules.
+    const rules = databaseRules.length > 0 ? databaseRules : getDiscountRules();
 
     const [upsellRuleRows] = await db.query(
       `SELECT source_category AS sourceCategory,
@@ -291,7 +295,7 @@ const evaluateDealRoute = async (req, res) => {
       WHERE is_active = TRUE
       ORDER BY confidence DESC, id`
     );
-    const upsellRules = upsellRuleRows.map((rule) => ({
+    const databaseUpsellRules = upsellRuleRows.map((rule) => ({
       ...rule,
       targetNameKeywords:
         typeof rule.targetNameKeywords === "string"
@@ -299,6 +303,8 @@ const evaluateDealRoute = async (req, res) => {
           : rule.targetNameKeywords,
       confidence: toNumber(rule.confidence),
     }));
+    // `undefined` deliberately lets the engine use its baseline rules.
+    const upsellRules = databaseUpsellRules.length > 0 ? databaseUpsellRules : undefined;
 
     // ---------------------------------------------------------------
     // 8. Run existing intelligence engine

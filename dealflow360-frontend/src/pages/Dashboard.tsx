@@ -10,7 +10,7 @@ import {
   Truck,
 } from "lucide-react";
 
-function Dashboard() {
+function Dashboard({ onNavigate }: { onNavigate: (page: "Deals" | "Deal Builder" | "Approvals") => void }) {
   return (
     <div className="dashboard">
       {/* Dashboard Header */}
@@ -25,7 +25,7 @@ function Dashboard() {
           </p>
         </div>
 
-        <button className="primary-button">
+        <button className="primary-button" onClick={() => onNavigate("Deal Builder")}>
           + Create Deal
         </button>
       </div>
@@ -120,7 +120,7 @@ function Dashboard() {
               </p>
             </div>
 
-            <button className="secondary-button">
+            <button className="secondary-button" onClick={() => onNavigate("Deals")}>
               View Details
               <ArrowUpRight size={14} />
             </button>
@@ -216,7 +216,7 @@ function Dashboard() {
               </p>
             </div>
 
-            <button className="secondary-button">
+            <button className="secondary-button" onClick={() => onNavigate("Approvals")}>
               View All
               <ArrowUpRight size={14} />
             </button>
@@ -296,7 +296,7 @@ function Dashboard() {
             </div>
           </div>
 
-          <button className="view-alerts">
+          <button className="view-alerts" onClick={() => onNavigate("Approvals")}>
             View all alerts
             <ArrowUpRight size={15} />
           </button>
@@ -314,7 +314,7 @@ function Dashboard() {
             </p>
           </div>
 
-          <button className="secondary-button">
+          <button className="secondary-button" onClick={() => onNavigate("Deals")}>
             View All Deals
             <ArrowUpRight size={14} />
           </button>

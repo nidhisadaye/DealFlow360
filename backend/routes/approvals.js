@@ -9,7 +9,13 @@ const router = express.Router();
 // GET /api/approvals — list all approval requests
 router.get('/approvals', authenticate, async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM approval_requests ORDER BY created_at DESC');
+    const [rows] = await pool.query(
+      `SELECT ar.*, d.title AS deal_title, d.total_amount, c.name AS customer_name
+       FROM approval_requests ar
+       JOIN deals d ON d.id = ar.deal_id
+       JOIN customers c ON c.id = d.customer_id
+       ORDER BY ar.created_at DESC`
+    );
     res.json({ success: true, data: rows, meta: { total: rows.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });

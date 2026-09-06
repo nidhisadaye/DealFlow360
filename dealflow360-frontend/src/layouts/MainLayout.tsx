@@ -270,7 +270,7 @@ function MainLayout() {
 
       case "Dashboard":
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={handleNavigation} />;
     }
   };
 

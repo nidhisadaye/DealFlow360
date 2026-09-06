@@ -26,7 +26,6 @@ function toAppliedRule(candidate) {
     };
 }
 function evaluateDiscount(deal, customer, products, rules) {
-    var _a;
     const activeRules = rules.filter((rule) => rule.isActive);
     const reasons = [];
     const ruleConflicts = [];
@@ -42,7 +41,7 @@ function evaluateDiscount(deal, customer, products, rules) {
     const matchingTierRules = activeRules.filter((rule) => rule.customerTier === customer.tier &&
         !rule.productCategory);
     const customerRule = matchingTierRules[0];
-    let allowedDiscount = (_a = customerRule === null || customerRule === void 0 ? void 0 : customerRule.maxDiscountPercent) !== null && _a !== void 0 ? _a : 0;
+    let allowedDiscount = customerRule?.maxDiscountPercent ?? 0;
     if (!customerRule) {
         reasons.push(`No discount rule found for customer tier ${customer.tier}.`);
     }

@@ -1,9 +1,7 @@
 // backend/config/discountRules.js
 //
-// There is intentionally no `discount_rules` table in the current schema
-// (see backend/db/schema.sql). The intelligence engine's `evaluateDiscount()`
-// takes a `DiscountRule[]` as a plain argument, so we supply it from a small
-// static config module instead of a DB read.
+// This is the baseline policy used only when a development database has no
+// active `discount_rules` rows. Production data in that table takes priority.
 //
 // IMPORTANT: these are the SAME rule values already used by
 // intelligence/testDealEngine.ts (RULE-GOLD / RULE-HARDWARE). Nothing here

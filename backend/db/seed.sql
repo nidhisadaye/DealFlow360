@@ -88,7 +88,7 @@ INSERT INTO customers (id, name, company, email, tier, is_active) VALUES
 
 INSERT INTO products (id, name, category, type, billing_type, sale_price, cost_price, currency, is_active) VALUES
 ('PROD-001', 'Enterprise Laptop', 'Hardware', 'GOOD', 'ONE_TIME', 80000, 60000, 'INR', TRUE),
-('PROD-002', 'Device Management', 'Services', 'SERVICE', 5000, 2000, 'INR', TRUE);
+('PROD-002', 'Device Management', 'Services', 'SERVICE', 'RECURRING', 5000, 2000, 'INR', TRUE);
 
 INSERT INTO warehouses (id, name, location, is_active) VALUES
 ('WH-001', 'Mumbai Warehouse', 'Mumbai', TRUE),
@@ -99,28 +99,34 @@ INSERT INTO inventory (id, warehouse_id, product_id, available_quantity, reserve
 ('INV-002', 'WH-002', 'PROD-001', 2, 0),
 ('INV-003', 'WH-001', 'PROD-002', 20, 0);
 
+-- Creates 200 customer-linked deals. The application shows 20 per page.
+-- Run after a SALES_REP user with id USER-001 exists.
+INSERT INTO customers (id, name, company, email, tier, is_active)
+WITH RECURSIVE seq (n) AS (SELECT 2 UNION ALL SELECT n + 1 FROM seq WHERE n < 200)
+SELECT CONCAT('CUS-', LPAD(n, 3, '0')), CONCAT('Customer ', n), CONCAT('Company ', n), CONCAT('customer', n, '@dealflow360.demo'), ELT(1 + (n % 3), 'BRONZE', 'SILVER', 'GOLD'), TRUE
+FROM seq;
+
 INSERT INTO deals (id, customer_id, sales_rep_id, title, status, discount_percent, subtotal, discount_amount, total_amount, cost_amount, margin_amount, margin_percent, risk_score, risk_level, currency)
-WITH RECURSIVE seq (n) AS (
-  SELECT 1
-  UNION ALL
-  SELECT n + 1 FROM seq WHERE n < 200
-)
+WITH RECURSIVE seq (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 200)
 SELECT
   CONCAT('DEAL-DEMO-', LPAD(n, 4, '0')),
-  (SELECT id FROM customers ORDER BY RAND() LIMIT 1),
-  (SELECT id FROM users WHERE role = 'SALES_REP' ORDER BY RAND() LIMIT 1),
-  CONCAT('Demo Deal #', n),
-  ELT(1 + FLOOR(RAND()*5), 'DRAFT','UNDER_REVIEW','APPROVAL_REQUIRED','APPROVED','FULFILLMENT_PENDING'),
-  ROUND(5 + RAND()*20, 2),
-  ROUND(50000 + RAND()*200000, 2),
-
-    0,
-    0,
-    0,
-    0,
-    0,
-
-  FLOOR(RAND()*100),
-  ELT(1 + FLOOR(RAND()*4), 'LOW','MEDIUM','HIGH','CRITICAL'),
+  CONCAT('CUS-', LPAD(n, 3, '0')),
+  'USER-001',
+  CONCAT('Enterprise Laptop Deal #', n),
+  ELT(1 + (n % 5), 'DRAFT', 'UNDER_REVIEW', 'APPROVAL_REQUIRED', 'APPROVED', 'FULFILLMENT_PENDING'),
+  ELT(1 + (n % 4), 0, 5, 10, 20),
+  ((n % 5) + 1) * 80000,
+  ((n % 5) + 1) * 80000 * ELT(1 + (n % 4), 0, 5, 10, 20) / 100,
+  ((n % 5) + 1) * 80000 * (1 - ELT(1 + (n % 4), 0, 5, 10, 20) / 100),
+  ((n % 5) + 1) * 60000,
+  ((n % 5) + 1) * 80000 * (1 - ELT(1 + (n % 4), 0, 5, 10, 20) / 100) - ((n % 5) + 1) * 60000,
+  ((((n % 5) + 1) * 80000 * (1 - ELT(1 + (n % 4), 0, 5, 10, 20) / 100) - ((n % 5) + 1) * 60000) / (((n % 5) + 1) * 80000 * (1 - ELT(1 + (n % 4), 0, 5, 10, 20) / 100)) * 100),
+  (n * 7) % 100,
+  ELT(1 + (n % 4), 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
   'INR'
+FROM seq;
+
+INSERT INTO deal_items (id, deal_id, product_id, product_name, quantity, unit_price, unit_cost, billing_type, discount_percent, subtotal, total)
+WITH RECURSIVE seq (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 200)
+SELECT CONCAT('ITEM-DEMO-', LPAD(n, 4, '0')), CONCAT('DEAL-DEMO-', LPAD(n, 4, '0')), 'PROD-001', 'Enterprise Laptop', (n % 5) + 1, 80000, 60000, 'ONE_TIME', ELT(1 + (n % 4), 0, 5, 10, 20), ((n % 5) + 1) * 80000, ((n % 5) + 1) * 80000 * (1 - ELT(1 + (n % 4), 0, 5, 10, 20) / 100)
 FROM seq;

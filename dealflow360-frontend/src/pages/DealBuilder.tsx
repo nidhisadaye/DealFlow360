@@ -1,706 +1,548 @@
-import {
-ArrowLeft,
-CheckCircle2,
-ChevronDown,
-FileText,
-Plus,
-Trash2,
-UserRound,
-} from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { useState } from "react";
-
-type DealProduct = {
-productId: string;
-name: string;
-description: string;
-price: number;
-cost: number;
-quantity: number;
-billingType: "ONE_TIME" | "RECURRING";
+type Customer = {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  tier: string;
 };
 
-const initialProducts: DealProduct[] = [
-{
-productId: "PROD-001",
-name: "Enterprise Laptop",
-description: "Business-grade laptop",
-price: 80000,
-cost: 60000,
-quantity: 50,
-billingType: "ONE_TIME",
-},
-{
-productId: "PROD-002",
-name: "Device Management",
-description: "Endpoint management license",
-price: 5000,
-cost: 2000,
-quantity: 50,
-billingType: "RECURRING",
-},
-];
+type Product = {
+  id: string;
+  name: string;
+  category: string;
+  sale_price: number;
+  cost_price: number;
+  billing_type: string;
+};
+
+type DealItem = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  unitCost: number;
+  billingType: string;
+  subtotal: number;
+};
 
 function DealBuilder({ onBack }: { onBack: () => void }) {
-const [isEvaluating, setIsEvaluating] = useState(false);
-const [products, setProducts] = useState<DealProduct[]>(initialProducts);
-
-const [dealName, setDealName] = useState(
-"Enterprise Device Modernization"
-);
-
-const [discountPercent, setDiscountPercent] = useState(18);
-
-const [showProductForm, setShowProductForm] = useState(false);
-
-const [newProduct, setNewProduct] = useState({
-  id: "",
-  name: "",
-  description: "",
-  category: "",
-  type: "GOOD" as "GOOD" | "SERVICE",
-  billing_type: "ONE_TIME" as "ONE_TIME" | "RECURRING",
-  sale_price: "",
-  cost_price: "",
-});
-
-const subtotal = products.reduce(
-(total, product) => total + product.price * product.quantity,
-0
-);
-
-const discount = subtotal * (discountPercent / 100);
-const estimatedTotal = subtotal - discount;
-
-const handleEvaluateDeal = async () => {
-if (products.length === 0) {
-alert("Please add at least one product to the deal.");
-return;
-}
-
-
-if (!dealName.trim()) {
-  alert("Please enter a deal name.");
-  return;
-}
-
-setIsEvaluating(true);
-
-try {
-  const token = localStorage.getItem("dealflow360_token");
-
-  if (!token) {
-    throw new Error("Your session has expired. Please log in again.");
-  }
-
-  const response = await fetch("http://localhost:5000/api/deals", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      customerId: "CUS-001",
-      title: dealName.trim(),
-      discountPercent,
-      items: products.map((product) => ({
-        productId: product.productId,
-        productName: product.name,
-        quantity: product.quantity,
-        unitPrice: product.price,
-        unitCost: product.cost,
-        billingType: product.billingType,
-        recurringInterval:
-          product.billingType === "RECURRING" ? "MONTHLY" : null,
-        discountPercent: 0,
-      })),
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data?.error?.message || "Deal creation failed."
-    );
-  }
-
-  alert(
-    `Deal created successfully!\n\n` +
-      `Deal ID: ${data.data.id}\n` +
-      `Status: ${data.data.status}\n` +
-      `Total: ₹${Number(data.data.totalAmount).toLocaleString("en-IN")}`
-  );
-} catch (error) {
-  console.error("Create deal error:", error);
-
-  alert(
-    error instanceof Error
-      ? error.message
-      : "Unable to connect to DealFlow360."
-  );
-} finally {
-  setIsEvaluating(false);
-}
-
-};
-
-const removeProduct = (productId: string) => {
-setProducts((currentProducts) =>
-currentProducts.filter(
-(product) => product.productId !== productId
-)
-);
-};
-
-const updateQuantity = (productId: string, quantity: number) => {
-setProducts((currentProducts) =>
-currentProducts.map((product) =>
-product.productId === productId
-? {
-...product,
-quantity: Math.max(1, quantity),
-}
-: product
-)
-);
-};
-
-return ( <div className="page-container"> <div className="deal-builder-header"> <div> <button className="back-button" onClick={onBack}> <ArrowLeft size={17} />
-Back to Deals </button>
-
-```
-      <p className="page-eyebrow">DEAL WORKSPACE</p>
-
-      <h1>Create New Deal</h1>
-
-      <p className="page-description">
-        Build the quotation and submit it for intelligent evaluation.
-      </p>
-    </div>
-
-    <div className="builder-status">
-      <span className="draft-dot"></span>
-      Draft
-    </div>
-  </div>
-
-  <div className="deal-builder-layout">
-    <main className="builder-main">
-      <section className="builder-card">
-        <div className="builder-card-header">
-          <div>
-            <h2>Customer Details</h2>
-            <p>Select the customer and commercial tier for this deal.</p>
-          </div>
-
-          <UserRound size={20} />
-        </div>
-
-        <div className="builder-form-grid">
-          <div className="form-field">
-            <label>Customer</label>
-
-            <div className="select-field">
-              <span>Tata Technologies</span>
-              <ChevronDown size={16} />
-            </div>
-          </div>
-
-          <div className="form-field">
-            <label>Customer Tier</label>
-
-            <button
-              type="button"
-              className="select-field"
-              onClick={() => {
-                const newProduct = initialProducts.find(
-                    (product) =>
-                    !products.some(
-                        (existingProduct) =>
-                        existingProduct.productId === product.productId
-                    )
-                );
-
-                if (newProduct) {
-                    setProducts((currentProducts) => [
-                    ...currentProducts,
-                    { ...newProduct, quantity: 1 },
-                    ]);
-                } else {
-                    alert("All available products are already added.");
-                }
-                }}
-            >
-              <span>GOLD</span>
-              <ChevronDown size={16} />
-            </button>
-          </div>
-
-          <div className="form-field">
-            <label>Deal Name</label>
-
-            <input
-              type="text"
-              value={dealName}
-              onChange={(e) => setDealName(e.target.value)}
-            />
-          </div>
-
-          <div className="form-field">
-            <label>Expected Close Date</label>
-
-            <input
-              type="date"
-              defaultValue="2026-09-30"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="builder-card">
-        <div className="builder-card-header">
-          <div>
-            <h2>Products & Services</h2>
-            <p>Add products that should be included in this quotation.</p>
-          </div>
-
-        <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-                console.log("Add Product clicked");
-                setShowProductForm(true);
-            }}
-        >
-            <Plus size={16} />
-            Add Product
-        </button>
-        </div>
-
-        <div className="product-list">
-          {products.map((product) => (
-            <div
-              className="product-row"
-              key={product.productId}
-            >
-              <div className="product-info">
-                <div className="product-icon">
-                  <FileText size={18} />
-                </div>
-
-                <div>
-                  <strong>{product.name}</strong>
-                  <span>{product.description}</span>
-                </div>
-              </div>
-
-              <div className="product-quantity">
-                <label>Qty</label>
-
-                <input
-                  type="number"
-                  value={product.quantity}
-                  min="1"
-                  onChange={(e) =>
-                    updateQuantity(
-                      product.productId,
-                      Number(e.target.value)
-                    )
-                  }
-                />
-              </div>
-
-              <div className="product-price">
-                <span>Unit Price</span>
-
-                <strong>
-                  ₹{product.price.toLocaleString("en-IN")}
-                </strong>
-              </div>
-
-              <div className="product-total">
-                <span>Total</span>
-
-                <strong>
-                  ₹
-                  {(
-                    product.price * product.quantity
-                  ).toLocaleString("en-IN")}
-                </strong>
-              </div>
-
-              <button
-                type="button"
-                className="delete-button"
-                onClick={() =>
-                  removeProduct(product.productId)
-                }
-                title={`Remove ${product.name}`}
-              >
-                <Trash2 size={17} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="builder-card">
-        <div className="builder-card-header">
-          <div>
-            <h2>Commercial Terms</h2>
-
-            <p>
-              Enter the requested commercial terms. Final governance is
-              determined by the Deal Engine.
-            </p>
-          </div>
-        </div>
-
-        <div className="commercial-grid">
-          <div className="form-field">
-            <label>Requested Discount</label>
-
-            <div className="input-with-suffix">
-              <input
-                type="number"
-                value={discountPercent}
-                min="0"
-                max="100"
-                onChange={(e) =>
-                  setDiscountPercent(
-                    Math.min(
-                      100,
-                      Math.max(0, Number(e.target.value))
-                    )
-                  )
-                }
-              />
-
-              <span>%</span>
-            </div>
-          </div>
-
-          <div className="form-field">
-            <label>Payment Terms</label>
-
-            <button
-              type="button"
-              className="select-field"
-              onClick={() =>
-                alert("Payment terms selection will open here.")
-              }
-            >
-              <span>Net 30</span>
-              <ChevronDown size={16} />
-            </button>
-          </div>
-
-          <div className="form-field">
-            <label>Billing Type</label>
-
-            <button
-              type="button"
-              className="select-field"
-              onClick={() =>
-                alert("Billing type selection will open here.")
-              }
-            >
-              <span>Hybrid</span>
-              <ChevronDown size={16} />
-            </button>
-          </div>
-        </div>
-      </section>
-    {showProductForm && (
-  <div className="builder-card">
-    <div className="builder-card-header">
-      <div>
-        <h2>Add New Product</h2>
-        <p>Enter the product details to save it to the DealFlow360 database.</p>
-      </div>
-    </div>
-
-    <div className="builder-form-grid">
-      <div className="form-field">
-        <label>Product ID</label>
-        <input
-          type="text"
-          placeholder="e.g. PROD-003"
-          value={newProduct.id}
-          onChange={(e) =>
-            setNewProduct({ ...newProduct, id: e.target.value })
-          }
-        />
-      </div>
-
-      <div className="form-field">
-        <label>Product Name</label>
-        <input
-          type="text"
-          placeholder="e.g. Wireless Keyboard"
-          value={newProduct.name}
-          onChange={(e) =>
-            setNewProduct({ ...newProduct, name: e.target.value })
-          }
-        />
-      </div>
-
-      <div className="form-field">
-        <label>Description</label>
-        <input
-          type="text"
-          placeholder="Product description"
-          value={newProduct.description}
-          onChange={(e) =>
-            setNewProduct({ ...newProduct, description: e.target.value })
-          }
-        />
-      </div>
-
-      <div className="form-field">
-        <label>Category</label>
-        <input
-          type="text"
-          placeholder="e.g. Hardware"
-          value={newProduct.category}
-          onChange={(e) =>
-            setNewProduct({ ...newProduct, category: e.target.value })
-          }
-        />
-      </div>
-
-      <div className="form-field">
-        <label>Type</label>
-        <select
-          value={newProduct.type}
-          onChange={(e) =>
-            setNewProduct({
-              ...newProduct,
-              type: e.target.value as "GOOD" | "SERVICE",
-            })
-          }
-        >
-          <option value="GOOD">Good</option>
-          <option value="SERVICE">Service</option>
-        </select>
-      </div>
-
-      <div className="form-field">
-        <label>Billing Type</label>
-        <select
-          value={newProduct.billing_type}
-          onChange={(e) =>
-            setNewProduct({
-              ...newProduct,
-              billing_type: e.target.value as "ONE_TIME" | "RECURRING",
-            })
-          }
-        >
-          <option value="ONE_TIME">One Time</option>
-          <option value="RECURRING">Recurring</option>
-        </select>
-      </div>
-
-      <div className="form-field">
-        <label>Sale Price</label>
-        <input
-          type="number"
-          placeholder="e.g. 25000"
-          value={newProduct.sale_price}
-          onChange={(e) =>
-            setNewProduct({ ...newProduct, sale_price: e.target.value })
-          }
-        />
-      </div>
-
-      <div className="form-field">
-        <label>Cost Price</label>
-        <input
-          type="number"
-          placeholder="e.g. 18000"
-          value={newProduct.cost_price}
-          onChange={(e) =>
-            setNewProduct({ ...newProduct, cost_price: e.target.value })
-          }
-        />
-      </div>
-    </div>
-
-    <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
-      <button
-        type="button"
-        className="secondary-button"
-        onClick={() => setShowProductForm(false)}
-      >
-        Cancel
-      </button>
-
-      <button
-  type="button"
-  className="evaluate-button"
-  onClick={async () => {
-    if (
-      !newProduct.id.trim() ||
-      !newProduct.name.trim() ||
-      !newProduct.category.trim() ||
-      !newProduct.sale_price ||
-      !newProduct.cost_price
-    ) {
-      alert("Please fill all required product fields.");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [title, setTitle] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [discountPercent, setDiscountPercent] = useState("0");
+
+  const [items, setItems] = useState<DealItem[]>([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    loadFormData();
+  }, []);
+
+  const loadFormData = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("dealflow360_token");
+      if (!token) throw new Error("Session expired. Please log in again.");
+
+      const [customersRes, productsRes] = await Promise.all([
+        fetch("http://localhost:5000/api/customers", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch("http://localhost:5000/api/products", {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      const customersData = await customersRes.json();
+      const productsData = await productsRes.json();
+
+      if (customersData.success) setCustomers(customersData.data || []);
+      if (productsData.success) setProducts(productsData.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddItem = () => {
+    if (!selectedProduct || !quantity) {
+      setError("Please select a product and enter quantity");
+      return;
+    }
+
+    const product = products.find((p) => p.id === selectedProduct);
+    if (!product) {
+      setError("Product not found");
+      return;
+    }
+
+    const qty = Number(quantity);
+    if (qty <= 0) {
+      setError("Quantity must be greater than 0");
+      return;
+    }
+
+    const subtotal = product.sale_price * qty;
+
+    const newItem: DealItem = {
+      productId: product.id,
+      productName: product.name,
+      quantity: qty,
+      unitPrice: product.sale_price,
+      unitCost: product.cost_price,
+      billingType: product.billing_type,
+      subtotal,
+    };
+
+    setItems([...items, newItem]);
+    setSelectedProduct("");
+    setQuantity("1");
+    setError("");
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const handleCreateDeal = async () => {
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    if (!title || !selectedCustomer || items.length === 0) {
+      setError("Please fill in title, select customer, and add at least one item");
+      setSubmitting(false);
       return;
     }
 
     try {
-      const response = await fetch("http://localhost:5000/api/products", {
+      const token = localStorage.getItem("dealflow360_token");
+
+      const response = await fetch("http://localhost:5000/api/deals", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(newProduct),
+        body: JSON.stringify({
+          customerId: selectedCustomer,
+          title,
+          items: items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
+          discountPercent: Number(discountPercent) || 0,
+        }),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data?.error?.message || "Unable to save product."
-        );
+      if (result.success) {
+        const evaluationResponse = await fetch(`http://localhost:5000/api/deals/${result.data.id}/evaluate`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const evaluation = await evaluationResponse.json();
+        if (!evaluationResponse.ok || !evaluation.success) {
+          throw new Error(evaluation.error?.message || "Deal was created, but intelligence evaluation failed.");
+        }
+        setSuccess(`Deal ${result.data.id} created and evaluated: ${evaluation.data.status.replaceAll("_", " ")}.`);
+        setTimeout(() => {
+          onBack();
+        }, 2000);
+      } else {
+        setError(result.error?.message || "Failed to create deal");
       }
-
-      const savedProduct: DealProduct = {
-        productId: data.data.id,
-        name: data.data.name,
-        description: data.data.description || "",
-        price: Number(data.data.sale_price),
-        cost: Number(data.data.cost_price),
-        quantity: 1,
-        billingType: data.data.billing_type,
-      };
-
-      setProducts((currentProducts) => [
-        ...currentProducts,
-        savedProduct,
-      ]);
-
-      setNewProduct({
-        id: "",
-        name: "",
-        description: "",
-        category: "",
-        type: "GOOD",
-        billing_type: "ONE_TIME",
-        sale_price: "",
-        cost_price: "",
-      });
-
-      setShowProductForm(false);
-
-      alert("Product saved successfully!");
-    } catch (error) {
-      console.error("Save product error:", error);
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Unable to save product."
-      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create deal");
+    } finally {
+      setSubmitting(false);
     }
-  }}
->
-  Save Product
-</button>
+  };
+
+  const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+  const discountAmount = (subtotal * Number(discountPercent)) / 100;
+  const total = subtotal - discountAmount;
+  const costAmount = items.reduce((sum, item) => sum + item.unitCost * item.quantity, 0);
+  const margin = total - costAmount;
+  const marginPercent = total > 0 ? (margin / total) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <p style={{ textAlign: "center", padding: "40px" }}>Loading form data...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-container">
+      <div className="page-header">
+        <div>
+          <button
+            onClick={onBack}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              marginBottom: "10px",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              color: "#666",
+              padding: "0",
+              fontSize: "14px",
+            }}
+          >
+            <ArrowLeft size={18} /> Back to Deals
+          </button>
+          <h1>Create New Deal</h1>
+          <p>Build a quotation by selecting products and quantities</p>
+        </div>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            background: "#fee",
+            color: "#c00",
+            padding: "12px",
+            borderRadius: "4px",
+            marginBottom: "20px",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div
+          style={{
+            background: "#efe",
+            color: "#060",
+            padding: "12px",
+            borderRadius: "4px",
+            marginBottom: "20px",
+          }}
+        >
+          {success}
+        </div>
+      )}
+
+      <div className="content-card">
+        <div style={{ marginBottom: "30px" }}>
+          <h3>Deal Information</h3>
+
+          <div style={{ marginBottom: "15px" }}>
+            <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+              Deal Title *
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., Q4 Enterprise Package"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px",
+                border: "1px solid #ddd",
+                borderRadius: "4px",
+                fontSize: "14px",
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: "15px" }}>
+            <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+              Customer *
+            </label>
+            <select
+              value={selectedCustomer}
+              onChange={(e) => setSelectedCustomer(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px",
+                border: "1px solid #ddd",
+                borderRadius: "4px",
+                fontSize: "14px",
+              }}
+            >
+              <option value="">-- Select a customer --</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name} - {customer.company} ({customer.tier})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "30px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
+          <h3>Add Products</h3>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "10px", marginBottom: "15px" }}>
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "12px", fontWeight: "bold" }}>
+                Product *
+              </label>
+              <select
+                value={selectedProduct}
+                onChange={(e) => setSelectedProduct(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "13px",
+                }}
+              >
+                <option value="">-- Select product --</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} (₹{product.sale_price.toLocaleString("en-IN")})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "12px", fontWeight: "bold" }}>
+                Quantity *
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "13px",
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "12px", fontWeight: "bold" }}>
+                Unit Price
+              </label>
+              <input
+                type="text"
+                disabled
+                value={selectedProduct ? `₹${products.find((p) => p.id === selectedProduct)?.sale_price.toLocaleString("en-IN") || ""}` : ""}
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "13px",
+                  background: "#f5f5f5",
+                }}
+              />
+            </div>
+
+            <button
+              onClick={handleAddItem}
+              style={{
+                padding: "8px 16px",
+                background: "#0052cc",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                marginTop: "23px",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Plus size={16} /> Add
+            </button>
+          </div>
+        </div>
+
+        {items.length > 0 && (
+          <div style={{ marginBottom: "30px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
+            <h3>Deal Items</h3>
+
+            <table style={{ width: "100%", fontSize: "13px", marginBottom: "20px" }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #eee" }}>
+                  <th style={{ textAlign: "left", padding: "10px" }}>Product</th>
+                  <th style={{ textAlign: "center", padding: "10px" }}>Qty</th>
+                  <th style={{ textAlign: "right", padding: "10px" }}>Unit Price</th>
+                  <th style={{ textAlign: "right", padding: "10px" }}>Subtotal</th>
+                  <th style={{ textAlign: "center", padding: "10px" }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={index} style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={{ padding: "10px" }}>{item.productName}</td>
+                    <td style={{ textAlign: "center", padding: "10px" }}>{item.quantity}</td>
+                    <td style={{ textAlign: "right", padding: "10px" }}>
+                      ₹{item.unitPrice.toLocaleString("en-IN")}
+                    </td>
+                    <td style={{ textAlign: "right", padding: "10px", fontWeight: "bold" }}>
+                      ₹{item.subtotal.toLocaleString("en-IN")}
+                    </td>
+                    <td style={{ textAlign: "center", padding: "10px" }}>
+                      <button
+                        onClick={() => handleRemoveItem(index)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#c00",
+                          cursor: "pointer",
+                          padding: "4px",
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
+                Discount Percent (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={discountPercent}
+                onChange={(e) => setDiscountPercent(e.target.value)}
+                style={{
+                  width: "150px",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                background: "#f9f9f9",
+                padding: "20px",
+                borderRadius: "4px",
+                marginBottom: "20px",
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                <div>
+                  <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
+                    <span>Subtotal:</span>
+                    <strong>₹{subtotal.toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
+                    <span>Discount ({discountPercent}%):</span>
+                    <strong style={{ color: "#c00" }}>-₹{discountAmount.toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div
+                    style={{
+                      marginBottom: "10px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "16px",
+                      fontWeight: "bold",
+                      borderTop: "1px solid #ddd",
+                      paddingTop: "10px",
+                    }}
+                  >
+                    <span>Total Amount:</span>
+                    <strong>₹{total.toLocaleString("en-IN")}</strong>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
+                    <span>Cost Amount:</span>
+                    <strong>₹{costAmount.toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between" }}>
+                    <span>Margin:</span>
+                    <strong style={{ color: margin >= 0 ? "#060" : "#c00" }}>
+                      ₹{margin.toLocaleString("en-IN")} ({marginPercent.toFixed(2)}%)
+                    </strong>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "14px",
+                      color: "#666",
+                      borderTop: "1px solid #ddd",
+                      paddingTop: "10px",
+                    }}
+                  >
+                    <span>Items Count:</span>
+                    <strong>{items.length}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={onBack}
+                disabled={submitting}
+                style={{
+                  padding: "10px 20px",
+                  background: "#f0f0f0",
+                  color: "#333",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  opacity: submitting ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleCreateDeal}
+                disabled={submitting}
+                style={{
+                  padding: "10px 24px",
+                  background: "#0052cc",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  opacity: submitting ? 0.6 : 1,
+                }}
+              >
+                {submitting ? "Creating..." : "Create Deal"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-)}
-    </main>
-
-    <aside className="builder-sidebar">
-      <div className="quote-summary-card">
-        <div className="quote-summary-header">
-          <div>
-            <span>QUOTE SUMMARY</span>
-            <h2>DL-2402</h2>
-          </div>
-
-          <FileText size={21} />
-        </div>
-
-        <div className="summary-line">
-          <span>Subtotal</span>
-
-          <strong>
-            ₹{subtotal.toLocaleString("en-IN")}
-          </strong>
-        </div>
-
-        <div className="summary-line discount-line">
-          <span>Requested Discount</span>
-
-          <strong>
-            -₹{discount.toLocaleString("en-IN")}
-          </strong>
-        </div>
-
-        <div className="summary-divider"></div>
-
-        <div className="summary-total">
-          <span>Estimated Deal Value</span>
-
-          <strong>
-            ₹{estimatedTotal.toLocaleString("en-IN")}
-          </strong>
-        </div>
-
-        <div className="evaluation-note">
-          <CheckCircle2 size={17} />
-
-          <div>
-            <strong>Ready for evaluation</strong>
-
-            <span>
-              The Deal Engine will evaluate discount, risk, approvals and
-              other governance rules.
-            </span>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="evaluate-button"
-          onClick={handleEvaluateDeal}
-          disabled={isEvaluating || products.length === 0}
-        >
-          {isEvaluating ? "Creating Deal..." : "Create Deal"}
-        </button>
-
-        <button
-          type="button"
-          className="save-draft-button"
-          onClick={() =>
-            alert("Deal draft saved successfully!")
-          }
-        >
-          Save Draft
-        </button>
-      </div>
-
-      <div className="builder-tip-card">
-        <span>DEAL INTELLIGENCE</span>
-
-        <h3>What happens next?</h3>
-
-        <p>
-          Once created, DealFlow360 can evaluate the deal, determine
-          approvals, assess risk and continue the fulfillment workflow.
-        </p>
-      </div>
-    </aside>
-  </div>
-</div>
-
-
-);
+  );
 }
 
 export default DealBuilder;
