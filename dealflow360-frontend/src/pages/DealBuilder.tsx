@@ -28,6 +28,16 @@ type DealItem = {
   subtotal: number;
 };
 
+type Evaluation = {
+  status: string;
+  riskScore: number;
+  riskLevel: string;
+  approval?: { required: boolean; reason?: string };
+  discount?: { requested: number; allowed: number; exceeded: boolean };
+  upsells?: Array<{ productName?: string; reason?: string }>;
+  warnings?: string[];
+};
+
 function DealBuilder({ onBack }: { onBack: () => void }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -42,6 +52,7 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
   const [items, setItems] = useState<DealItem[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -158,6 +169,7 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
           throw new Error(evaluation.error?.message || "Deal was created, but intelligence evaluation failed.");
         }
         setSuccess(`Deal ${result.data.id} created and evaluated: ${evaluation.data.status.replaceAll("_", " ")}.`);
+        setEvaluation(evaluation.data);
         setTimeout(() => {
           onBack();
         }, 2000);
@@ -237,6 +249,19 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
           }}
         >
           {success}
+        </div>
+      )}
+
+      {evaluation && (
+        <div className="evaluation-note" style={{ marginBottom: "20px" }}>
+          <strong>Deal intelligence:</strong>{" "}
+          Risk {evaluation.riskLevel} ({Number(evaluation.riskScore || 0)}/100) ·{" "}
+          {evaluation.approval?.required ? "Approval required" : "No approval required"}
+          {evaluation.discount?.exceeded ? ` · Discount exceeds allowed ${evaluation.discount.allowed}%` : ""}
+          {evaluation.upsells?.length ? ` · ${evaluation.upsells.length} upsell suggestion(s)` : ""}
+          {evaluation.warnings?.length ? (
+            <div style={{ marginTop: "6px" }}>{evaluation.warnings.join(" ")}</div>
+          ) : null}
         </div>
       )}
 

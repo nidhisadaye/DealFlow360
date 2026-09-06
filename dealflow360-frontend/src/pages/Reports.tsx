@@ -1,15 +1,33 @@
 import { FileText, Download, CheckCircle2 } from "lucide-react";
 
 export default function Reports() {
-  const handleDownload = () => {
-    const link = document.createElement("a");
+  const handleDownload = async () => {
+    const token = localStorage.getItem("dealflow360_token");
+    if (!token) {
+      alert("Your session has expired. Please log in again.");
+      return;
+    }
 
-    link.href = "http://localhost:5000/DealFlow360_Project_Report.pdf";
-    link.download = "DealFlow360_Project_Report.pdf";
+    try {
+      const response = await fetch("http://localhost:5000/api/reports/download", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error?.message || "Unable to download the report.");
+      }
 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "DealFlow360_Business_Report.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to download the report.");
+    }
   };
 
   return (
@@ -99,7 +117,7 @@ export default function Reports() {
                   fontSize: "14px",
                 }}
               >
-                Complete project documentation in PDF format.
+                Live deal performance report with discount, revenue, profit, margin and risk.
               </p>
             </div>
           </div>

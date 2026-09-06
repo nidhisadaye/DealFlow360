@@ -11,55 +11,41 @@ import "../Login.css";
 
 type LoginProps = {
   onLogin?: () => void;
+  onRegister?: () => void;
 };
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, onRegister }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoading(true);
+    e.preventDefault();
+    setLoading(true);
 
-  try {
-    const response = await fetch("http://localhost:5000/api/auth/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        password,
-      }),
-    });
+    try {
+      const response = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    const result = await response.json();
+      const result = await response.json();
 
-    if (!response.ok || !result.success) {
-      throw new Error(
-        result?.error?.message || "Invalid email or password."
-      );
+      if (!response.ok || !result.success) {
+        throw new Error(result?.error?.message || "Unable to complete the request.");
+      }
+
+      localStorage.setItem("dealflow360_token", result.data.token);
+      localStorage.setItem("dealflow360_user", JSON.stringify(result.data.user));
+      onLogin?.();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to complete the request.");
+    } finally {
+      setLoading(false);
     }
-
-    localStorage.setItem("dealflow360_token", result.data.token);
-    localStorage.setItem(
-      "dealflow360_user",
-      JSON.stringify(result.data.user)
-    );
-
-    onLogin?.();
-  } catch (error) {
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Unable to sign in. Please try again."
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <div className="login-page">
@@ -168,7 +154,11 @@ export default function Login({ onLogin }: LoginProps) {
               <div className="password-label-row">
                 <label className="field-label">Password</label>
 
-                <button type="button" className="forgot-button">
+                <button
+                  type="button"
+                  className="forgot-button"
+                  onClick={() => alert("Please contact an administrator to reset your password.")}
+                >
                   Forgot password?
                 </button>
               </div>
@@ -203,10 +193,7 @@ export default function Login({ onLogin }: LoginProps) {
                   <input type="checkbox" />
                   <span>Remember me</span>
                 </label>
-
-                <span className="secure-copy">
-                  Secure access
-                </span>
+                <span className="secure-copy">Secure access</span>
               </div>
 
               <button
@@ -229,6 +216,13 @@ export default function Login({ onLogin }: LoginProps) {
                 )}
               </button>
             </form>
+
+            <p className="login-footer">
+              New to DealFlow360?{" "}
+              <button type="button" className="forgot-button" onClick={onRegister}>
+                Register here
+              </button>
+            </p>
 
             <div className="login-divider">
               <span />

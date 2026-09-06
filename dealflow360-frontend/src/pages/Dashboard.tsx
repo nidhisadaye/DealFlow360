@@ -9,8 +9,34 @@ import {
   AlertTriangle,
   Truck,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+
+type DashboardSummary = {
+  total: number;
+  open_pipeline: number;
+  approved_value: number;
+  needs_attention: number;
+};
 
 function Dashboard({ onNavigate }: { onNavigate: (page: "Deals" | "Deal Builder" | "Approvals") => void }) {
+  const [summary, setSummary] = useState<DashboardSummary>({ total: 0, open_pipeline: 0, approved_value: 0, needs_attention: 0 });
+
+  useEffect(() => {
+    const token = localStorage.getItem("dealflow360_token");
+    if (!token) return;
+
+    fetch("http://localhost:5000/api/deals/summary", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((response) => response.json())
+      .then((result) => {
+        if (result.success) setSummary(result.data);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const formatCurrency = (value: number) => `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
   return (
     <div className="dashboard">
       {/* Dashboard Header */}
@@ -46,7 +72,7 @@ function Dashboard({ onNavigate }: { onNavigate: (page: "Deals" | "Deal Builder"
 
           <span className="stat-label">Active Deals</span>
 
-          <strong>24</strong>
+          <strong>{summary.total}</strong>
 
           <small>vs last month</small>
         </div>
@@ -65,7 +91,7 @@ function Dashboard({ onNavigate }: { onNavigate: (page: "Deals" | "Deal Builder"
 
           <span className="stat-label">Pipeline Value</span>
 
-          <strong>₹48.6L</strong>
+          <strong>{formatCurrency(summary.open_pipeline)}</strong>
 
           <small>vs last month</small>
         </div>
@@ -77,13 +103,13 @@ function Dashboard({ onNavigate }: { onNavigate: (page: "Deals" | "Deal Builder"
             </div>
 
             <span className="stat-trend attention">
-              3 high priority
+              {summary.needs_attention} need review
             </span>
           </div>
 
           <span className="stat-label">Pending Approvals</span>
 
-          <strong>7</strong>
+          <strong>{summary.needs_attention}</strong>
 
           <small>Requires review</small>
         </div>
@@ -101,7 +127,7 @@ function Dashboard({ onNavigate }: { onNavigate: (page: "Deals" | "Deal Builder"
 
           <span className="stat-label">At-Risk Deals</span>
 
-          <strong>4</strong>
+          <strong>{summary.needs_attention}</strong>
 
           <small>Potential impact detected</small>
         </div>

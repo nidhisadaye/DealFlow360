@@ -49,6 +49,14 @@ const secondaryNavigation = [
   { label: "Settings", icon: Settings },
 ];
 
+const roleNavigation: Record<string, string[]> = {
+  SALES_REP: ["Dashboard", "Deals", "Deal Builder", "Fulfillment", "Customers"],
+  SALES_MANAGER: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Customers"],
+  FINANCE_OPERATIONS: ["Dashboard", "Deals", "Billing", "Reports"],
+  ADMIN: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
+  CUSTOMER: ["Dashboard", "Customers"],
+};
+
 function MainLayout() {
   const [activePage, setActivePage] = useState<Page>("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -61,8 +69,18 @@ function MainLayout() {
         email: "nidhi.demo@dealflow360.com",
         role: "SALES_REP",
       };
+  const allowedPages = roleNavigation[user.role] || roleNavigation.SALES_REP;
+  const visibleNavigation = navigation.filter((item) => allowedPages.includes(item.label));
+  const visibleSecondaryNavigation = secondaryNavigation.filter((item) => allowedPages.includes(item.label));
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem("dealflow360_token");
+    if (token) {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined);
+    }
     localStorage.removeItem("dealflow360_token");
     localStorage.removeItem("dealflow360_user");
     window.location.reload();
@@ -243,6 +261,10 @@ function MainLayout() {
   );
 
   const renderPage = () => {
+    if (user.role === "CUSTOMER" && activePage === "Dashboard") {
+      return <CustomerPortal />;
+    }
+
     switch (activePage) {
       case "Deals":
         return <Deals onCreateDeal={() => handleNavigation("Deal Builder")} />;
@@ -310,7 +332,7 @@ function MainLayout() {
         <nav className="sidebar-nav">
           <div className="nav-section-label">WORKSPACE</div>
 
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const isActive = activePage === item.label;
 
@@ -330,7 +352,7 @@ function MainLayout() {
             SYSTEM
           </div>
 
-          {secondaryNavigation.map((item) => {
+          {visibleSecondaryNavigation.map((item) => {
             const Icon = item.icon;
             const isActive = activePage === item.label;
 
@@ -348,13 +370,15 @@ function MainLayout() {
         </nav>
 
         <div className="sidebar-bottom">
-          <button
-            className="create-deal-button"
-            onClick={() => handleNavigation("Deal Builder")}
-          >
-            <span>+</span>
-            Create Deal
-          </button>
+          {allowedPages.includes("Deal Builder") && (
+            <button
+              className="create-deal-button"
+              onClick={() => handleNavigation("Deal Builder")}
+            >
+              <span>+</span>
+              Create Deal
+            </button>
+          )}
 
           <div className="sidebar-profile">
             <div className="profile-avatar">
@@ -388,7 +412,11 @@ function MainLayout() {
           </div>
 
           <div className="topbar-actions">
-            <button className="notification-button">
+            <button
+              className="notification-button"
+              onClick={() => handleNavigation("Approvals")}
+              title="Open pending approvals"
+            >
               <Bell size={19} />
               <span className="notification-dot"></span>
             </button>
