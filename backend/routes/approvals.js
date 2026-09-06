@@ -7,7 +7,7 @@ const logEvent = require('../utils/logEvent');
 const router = express.Router();
 
 // GET /api/approvals — list all approval requests
-router.get('/approvals', authenticate, async (req, res) => {
+router.get('/approvals', authenticate, authorize(UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN), async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT ar.*, d.title AS deal_title, d.total_amount, c.name AS customer_name

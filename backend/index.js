@@ -21,6 +21,8 @@ const warehouseRoutes = require('./routes/warehouses');
 const billingRoutes = require('./routes/billing');
 const negotiationRoutes = require('./routes/negotiations');
 const evaluationRoutes = require('./routes/evaluation');
+const reportRoutes = require('./routes/reports');
+const customerPortalRoutes = require('./routes/customerPortal');
 
 
 app.get('/', (req, res) => {
@@ -62,6 +64,9 @@ app.use('/api', approvalRoutes);
 app.use('/api', warehouseRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', negotiationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/DealFlow360_Project_Report.pdf', reportRoutes);
+app.use('/api/customer-portal', customerPortalRoutes);
 
 // Intelligence evaluation route
 // POST /api/deals/:id/evaluate

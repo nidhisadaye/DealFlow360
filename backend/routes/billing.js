@@ -6,6 +6,11 @@ const logEvent = require('../utils/logEvent');
 
 const router = express.Router();
 
+const serializeBillingRow = (row) => ({
+  ...row,
+  amount: Number(row.amount || 0),
+});
+
 // GET /api/deals/:id/billing — get billing info for one deal
 router.get('/deals/:id/billing', authenticate, async (req, res) => {
   try {
@@ -23,8 +28,8 @@ router.get('/deals/:id/billing', authenticate, async (req, res) => {
       success: true,
       data: {
         dealId,
-        invoice: invoices[0] || null,
-        subscriptions,
+        invoice: invoices[0] ? serializeBillingRow(invoices[0]) : null,
+        subscriptions: subscriptions.map(serializeBillingRow),
       },
       meta: {
         totalInvoices: invoices.length,
@@ -97,7 +102,7 @@ router.post('/deals/:id/invoices', authenticate, authorize(UserRole.FINANCE_OPER
 router.get('/deals/:id/subscriptions', authenticate, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM subscriptions WHERE deal_id = ? ORDER BY created_at DESC', [req.params.id]);
-    res.json({ success: true, data: rows, meta: { total: rows.length } });
+    res.json({ success: true, data: rows.map(serializeBillingRow), meta: { total: rows.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
   }
@@ -163,7 +168,7 @@ router.post('/deals/:id/subscriptions', authenticate, authorize(UserRole.FINANCE
 router.get('/invoices', authenticate, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM invoices ORDER BY created_at DESC');
-    res.json({ success: true, data: rows, meta: { total: rows.length } });
+    res.json({ success: true, data: rows.map(serializeBillingRow), meta: { total: rows.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
   }
