@@ -12,7 +12,7 @@ const serializeProduct = (product) => ({
 
 router.get('/', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN), async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM products');
+    const [rows] = await pool.query('SELECT * FROM products WHERE is_active = TRUE ORDER BY name');
     res.json({ success: true, data: rows.map(serializeProduct), meta: { total: rows.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
@@ -31,10 +31,10 @@ router.get('/:id', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MA
   }
 });
 
-router.post('/', authenticate, authorize(UserRole.ADMIN), async (req, res) => {
+router.post('/', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.ADMIN), async (req, res) => {
   try {
     const {
-      id,
+      id: requestedId,
       name,
       description,
       category,
@@ -45,8 +45,8 @@ router.post('/', authenticate, authorize(UserRole.ADMIN), async (req, res) => {
       currency,
     } = req.body;
 
+    const generatedId = requestedId || `PROD-${Date.now()}${Math.floor(Math.random() * 1000)}`;
     if (
-      !id ||
       !name ||
       !category ||
       !type ||
@@ -58,7 +58,7 @@ router.post('/', authenticate, authorize(UserRole.ADMIN), async (req, res) => {
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'id, name, category, type, billing_type, sale_price and cost_price are required.',
+          message: 'name, category, type, billing_type, sale_price and cost_price are required.',
         },
       });
     }
@@ -68,7 +68,7 @@ router.post('/', authenticate, authorize(UserRole.ADMIN), async (req, res) => {
        (id, name, description, category, type, billing_type, sale_price, cost_price, currency, is_active)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
       [
-        id,
+        generatedId,
         name,
         description || null,
         category,
@@ -83,7 +83,7 @@ router.post('/', authenticate, authorize(UserRole.ADMIN), async (req, res) => {
     res.status(201).json({
       success: true,
       data: {
-        id,
+        generatedId,
         name,
         description: description || null,
         category,

@@ -21,6 +21,10 @@ function Fulfillment() {
   const [showAllocationForm, setShowAllocationForm] = useState(false);
   const [allocationForm, setAllocationForm] = useState({ dealId: "", warehouseId: "", productId: "", quantity: "" });
   const [inventory, setInventory] = useState<Inventory[]>([]);
+  const [showWarehouseForm, setShowWarehouseForm] = useState(false);
+  const [warehouseForm, setWarehouseForm] = useState({ name: "", location: "" });
+  const user = JSON.parse(localStorage.getItem("dealflow360_user") || "{}");
+  const [fulfillmentSummary, setFulfillmentSummary] = useState({ pendingFulfillment: 0, allocationCount: 0 });
 
   useEffect(() => {
     loadWarehouseData();
@@ -38,6 +42,11 @@ function Fulfillment() {
 
       const data = await response.json();
       if (data.success) setWarehouses(data.data || []);
+      const summaryResponse = await fetch("http://localhost:5000/api/fulfillment/summary", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const summaryData = await summaryResponse.json();
+      if (summaryData.success) setFulfillmentSummary(summaryData.data);
     } catch (error) {
       console.error("Failed to load warehouses:", error);
     } finally {
@@ -62,6 +71,19 @@ function Fulfillment() {
     } catch (error) {
       alert("Error fetching inventory: " + (error instanceof Error ? error.message : "Unknown error"));
     }
+  };
+
+  const addWarehouse = async () => {
+    const response = await fetch("http://localhost:5000/api/warehouses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("dealflow360_token")}` },
+      body: JSON.stringify(warehouseForm),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error?.message || "Unable to add warehouse.");
+    setWarehouses((current) => [...current, result.data]);
+    setWarehouseForm({ name: "", location: "" });
+    setShowWarehouseForm(false);
   };
 
   const handleAllocate = async () => {
@@ -103,6 +125,7 @@ function Fulfillment() {
         setShowAllocationForm(false);
         setAllocationForm({ dealId: "", warehouseId: "", productId: "", quantity: "" });
         setInventory([]);
+        loadWarehouseData();
       } else {
         alert("Failed to allocate: " + (result.error?.message || "Unknown error"));
       }
@@ -110,8 +133,6 @@ function Fulfillment() {
       alert("Error allocating: " + (error instanceof Error ? error.message : "Unknown error"));
     }
   };
-
-  const pendingFulfillment = 0;
 
   return (
     <div className="page-container">
@@ -129,7 +150,7 @@ function Fulfillment() {
             <PackageCheck size={20} />
           </div>
           <span>Pending Fulfillment</span>
-          <strong>{pendingFulfillment}</strong>
+          <strong>{fulfillmentSummary.pendingFulfillment}</strong>
         </div>
 
         <div className="kpi-card">
@@ -137,7 +158,7 @@ function Fulfillment() {
             <Warehouse size={20} />
           </div>
           <span>Warehouse Allocations</span>
-          <strong>0</strong>
+          <strong>{fulfillmentSummary.allocationCount}</strong>
         </div>
 
         <div className="kpi-card">
@@ -159,7 +180,10 @@ function Fulfillment() {
             <Plus size={18} />
             Allocate Inventory
           </button>
+          {user.role === "ADMIN" && <button className="secondary-button" onClick={() => setShowWarehouseForm((current) => !current)}>+ Add Warehouse</button>}
         </div>
+
+        {showWarehouseForm && <div className="inline-create-form"><input placeholder="Warehouse name" value={warehouseForm.name} onChange={(event) => setWarehouseForm({ ...warehouseForm, name: event.target.value })} /><input placeholder="Location" value={warehouseForm.location} onChange={(event) => setWarehouseForm({ ...warehouseForm, location: event.target.value })} /><button className="primary-button" onClick={() => addWarehouse().catch((reason) => alert(reason instanceof Error ? reason.message : "Unable to add warehouse."))}>Save warehouse</button></div>}
 
         {showAllocationForm && (
           <div className="form-section" style={{ padding: "20px", borderBottom: "1px solid #e0e0e0" }}>

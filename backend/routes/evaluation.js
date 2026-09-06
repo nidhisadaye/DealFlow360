@@ -242,14 +242,22 @@ const evaluateDealRoute = async (req, res) => {
     // 6. Fetch warehouses
     // ---------------------------------------------------------------
 
-    const [warehouseRows] = await db.query(
-      `SELECT w.*, COALESCE(dw.is_active, w.is_active) AS scoped_is_active
-       FROM warehouses w
-       LEFT JOIN deal_warehouses dw
-         ON dw.warehouse_id = w.id AND dw.deal_id = ?
-       WHERE dw.deal_id IS NOT NULL OR w.is_active = TRUE`,
-      [dealId]
-    );
+    let warehouseRows;
+    try {
+      [warehouseRows] = await db.query(
+        `SELECT w.*, COALESCE(dw.is_active, w.is_active) AS scoped_is_active
+         FROM warehouses w
+         LEFT JOIN deal_warehouses dw
+           ON dw.warehouse_id = w.id AND dw.deal_id = ?
+         WHERE dw.deal_id IS NOT NULL OR w.is_active = TRUE`,
+        [dealId]
+      );
+    } catch (warehouseError) {
+      // A database created before deal_warehouses was added can still evaluate
+      // deals using all active warehouses.
+      console.warn("deal_warehouses is unavailable; using active warehouses:", warehouseError.message);
+      [warehouseRows] = await db.query("SELECT *, is_active AS scoped_is_active FROM warehouses WHERE is_active = TRUE");
+    }
 
     // ---------------------------------------------------------------
     // 7. Map DB data into intelligence types
@@ -265,17 +273,22 @@ const evaluateDealRoute = async (req, res) => {
     }));
 
     // Discount rules are loaded from the same schema as the deal data.
-    const [ruleRows] = await db.query(
-      `SELECT id, name, customer_tier AS customerTier,
-              product_category AS productCategory,
-              max_discount_percent AS maxDiscountPercent,
-              requires_approval_above AS requiresApprovalAbove,
-              is_active AS isActive,
-              created_at AS createdAt,
-              updated_at AS updatedAt
-       FROM discount_rules
-       WHERE is_active = TRUE`
-    );
+    let ruleRows = [];
+    try {
+      [ruleRows] = await db.query(
+        `SELECT id, name, customer_tier AS customerTier,
+                product_category AS productCategory,
+                max_discount_percent AS maxDiscountPercent,
+                requires_approval_above AS requiresApprovalAbove,
+                is_active AS isActive,
+                created_at AS createdAt,
+                updated_at AS updatedAt
+         FROM discount_rules
+         WHERE is_active = TRUE`
+      );
+    } catch (ruleError) {
+      console.warn("discount_rules is unavailable; using baseline rules:", ruleError.message);
+    }
     const databaseRules = ruleRows.map((rule) => ({
       ...rule,
       maxDiscountPercent: toNumber(rule.maxDiscountPercent),
@@ -286,15 +299,20 @@ const evaluateDealRoute = async (req, res) => {
     // intelligence path usable with the shared, versioned baseline rules.
     const rules = databaseRules.length > 0 ? databaseRules : getDiscountRules();
 
-    const [upsellRuleRows] = await db.query(
-      `SELECT source_category AS sourceCategory,
-              target_name_keywords AS targetNameKeywords,
-              reason,
-              confidence
-       FROM upsell_rules
-      WHERE is_active = TRUE
-      ORDER BY confidence DESC, id`
-    );
+    let upsellRuleRows = [];
+    try {
+      [upsellRuleRows] = await db.query(
+        `SELECT source_category AS sourceCategory,
+                target_name_keywords AS targetNameKeywords,
+                reason,
+                confidence
+         FROM upsell_rules
+        WHERE is_active = TRUE
+        ORDER BY confidence DESC, id`
+      );
+    } catch (upsellError) {
+      console.warn("upsell_rules is unavailable; using baseline rules:", upsellError.message);
+    }
     const databaseUpsellRules = upsellRuleRows.map((rule) => ({
       ...rule,
       targetNameKeywords:
@@ -441,16 +459,13 @@ const evaluateDealRoute = async (req, res) => {
     // Unexpected error
     // ---------------------------------------------------------------
 
-    console.error(
-      "POST /api/deals/:id/evaluate failed:",
-      err
-    );
+    console.error("POST /api/deals/:id/evaluate failed:", err);
 
     return res.status(500).json({
       success: false,
       error: {
         code: "EVALUATION_FAILED",
-        message: "Failed to evaluate deal.",
+        message: process.env.NODE_ENV === 'production' ? "Failed to evaluate deal." : err.message,
       },
     });
   }

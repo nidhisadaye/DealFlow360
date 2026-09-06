@@ -50,9 +50,9 @@ const secondaryNavigation = [
 ];
 
 const roleNavigation: Record<string, string[]> = {
-  SALES_REP: ["Dashboard", "Deals", "Deal Builder", "Fulfillment", "Customers"],
-  SALES_MANAGER: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Customers"],
-  FINANCE_OPERATIONS: ["Dashboard", "Deals", "Billing", "Reports"],
+  SALES_REP: ["Dashboard", "Deals", "Deal Builder", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
+  SALES_MANAGER: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
+  FINANCE_OPERATIONS: ["Dashboard", "Deals", "Billing", "Reports", "Settings"],
   ADMIN: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
   CUSTOMER: ["Dashboard", "Customers"],
 };
@@ -60,15 +60,11 @@ const roleNavigation: Record<string, string[]> = {
 function MainLayout() {
   const [activePage, setActivePage] = useState<Page>("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const storedUser = localStorage.getItem("dealflow360_user");
-  const user = storedUser
-    ? JSON.parse(storedUser)
-    : {
-        name: "Nidhi",
-        email: "nidhi.demo@dealflow360.com",
-        role: "SALES_REP",
-      };
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  if (!user) return null;
   const allowedPages = roleNavigation[user.role] || roleNavigation.SALES_REP;
   const visibleNavigation = navigation.filter((item) => allowedPages.includes(item.label));
   const visibleSecondaryNavigation = secondaryNavigation.filter((item) => allowedPages.includes(item.label));
@@ -380,7 +376,7 @@ function MainLayout() {
             </button>
           )}
 
-          <div className="sidebar-profile">
+          <button className="sidebar-profile" onClick={() => setProfileOpen((current) => !current)} aria-expanded={profileOpen}>
             <div className="profile-avatar">
               {user.name?.charAt(0)?.toUpperCase() || "N"}
             </div>
@@ -391,7 +387,15 @@ function MainLayout() {
             </div>
 
             <ChevronDown size={16} />
-          </div>
+          </button>
+          {profileOpen && (
+            <div className="profile-menu">
+              <strong>{user.name}</strong>
+              <span>{user.email}</span>
+              <button onClick={() => { setProfileOpen(false); handleNavigation("Settings"); }}><Settings size={15} /> Account settings</button>
+              <button className="profile-logout" onClick={handleLogout}><LogOut size={15} /> Log out</button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -421,9 +425,17 @@ function MainLayout() {
               <span className="notification-dot"></span>
             </button>
 
-            <div className="topbar-avatar">
-              {user.name?.charAt(0)?.toUpperCase() || "N"}
-            </div>
+            <button className="topbar-profile-button" onClick={() => setProfileOpen((current) => !current)} aria-label="Open user profile">
+              <div className="topbar-avatar">{user.name?.charAt(0)?.toUpperCase() || "?"}</div>
+            </button>
+            {profileOpen && (
+              <div className="topbar-profile-menu">
+                <strong>{user.name}</strong>
+                <span>{user.email}</span>
+                <span>{user.role?.replaceAll("_", " ")}</span>
+                <button onClick={handleLogout}><LogOut size={15} /> Log out</button>
+              </div>
+            )}
           </div>
         </header>
 

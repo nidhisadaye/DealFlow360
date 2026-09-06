@@ -5,43 +5,28 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { UserRole } = require('../config/enums');
 
 const router = express.Router();
-const reportRoles = [UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN];
-
+const reportRoles = [UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN];
 const toNumber = (value) => Number(value || 0);
 const money = (value) => `INR ${toNumber(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-function filtersFromQuery(query) {
-  const where = [];
+function buildFilters(query) {
+  const conditions = [];
   const values = [];
-
-  if (query.from) {
-    where.push('d.created_at >= ?');
-    values.push(query.from);
-  }
-  if (query.to) {
-    where.push('d.created_at < DATE_ADD(?, INTERVAL 1 DAY)');
-    values.push(query.to);
-  }
-  if (query.salesRepId) {
-    where.push('d.sales_rep_id = ?');
-    values.push(query.salesRepId);
-  }
-  if (query.status) {
-    where.push('d.status = ?');
-    values.push(query.status);
-  }
+  if (query.from) { conditions.push('d.created_at >= ?'); values.push(query.from); }
+  if (query.to) { conditions.push('d.created_at < DATE_ADD(?, INTERVAL 1 DAY)'); values.push(query.to); }
+  if (query.salesRepId) { conditions.push('d.sales_rep_id = ?'); values.push(query.salesRepId); }
+  if (query.status) { conditions.push('d.status = ?'); values.push(query.status); }
   if (query.productId) {
-    where.push('EXISTS (SELECT 1 FROM deal_items fi WHERE fi.deal_id = d.id AND fi.product_id = ?)');
+    conditions.push('EXISTS (SELECT 1 FROM deal_items filter_items WHERE filter_items.deal_id = d.id AND filter_items.product_id = ?)');
     values.push(query.productId);
   }
-
-  return { clause: where.length ? `WHERE ${where.join(' AND ')}` : '', values };
+  return { clause: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '', values };
 }
 
-async function loadSummary(query) {
-  const filters = filtersFromQuery(query);
-  const [[summary]] = await pool.query(
-    `SELECT COUNT(*) AS total_deals,
+async function loadReportData(query) {
+  const filters = buildFilters(query);
+  const [[summary]] = await pool.query(`
+    SELECT COUNT(*) AS total_deals,
       COALESCE(SUM(d.subtotal), 0) AS quotation_value,
       COALESCE(SUM(d.discount_amount), 0) AS total_discount,
       COALESCE(SUM(d.total_amount), 0) AS revenue,
@@ -52,30 +37,20 @@ async function loadSummary(query) {
       COALESCE(AVG(d.risk_score), 0) AS average_risk,
       COALESCE(SUM(d.status IN ('APPROVAL_REQUIRED', 'REAPPROVAL_REQUIRED')), 0) AS pending_approvals,
       COALESCE(SUM(d.status = 'CLOSED'), 0) AS closed_deals,
-      COALESCE(SUM(d.risk_level IN ('HIGH', 'CRITICAL')), 0) AS high_risk_deals
-     FROM deals d ${filters.clause}`,
-    filters.values
-  );
-
-  const [statuses] = await pool.query(
-    `SELECT d.status, COUNT(*) AS deal_count,
-       COALESCE(SUM(d.total_amount), 0) AS revenue,
-       COALESCE(SUM(d.margin_amount), 0) AS profit
-     FROM deals d ${filters.clause}
-     GROUP BY d.status ORDER BY deal_count DESC`,
-    filters.values
-  );
-
-  const [salesReps] = await pool.query(
-    `SELECT u.name AS sales_rep, COUNT(*) AS deal_count,
-       COALESCE(SUM(d.discount_amount), 0) AS discount,
-       COALESCE(SUM(d.total_amount), 0) AS revenue,
-       COALESCE(SUM(d.margin_amount), 0) AS profit
-     FROM deals d JOIN users u ON u.id = d.sales_rep_id ${filters.clause}
-     GROUP BY u.id, u.name ORDER BY profit DESC`,
-    filters.values
-  );
-
+      COALESCE(SUM(d.risk_level IN ('HIGH', 'CRITICAL')), 0) AS high_risk_deals,
+      COALESCE(SUM(d.margin_amount > 0), 0) AS profitable_deals
+    FROM deals d ${filters.clause}`, filters.values);
+  const [statuses] = await pool.query(`
+    SELECT d.status, COUNT(*) AS deal_count, COALESCE(SUM(d.total_amount), 0) AS revenue,
+      COALESCE(SUM(d.margin_amount), 0) AS profit
+    FROM deals d ${filters.clause} GROUP BY d.status ORDER BY deal_count DESC`, filters.values);
+  const [salesReps] = await pool.query(`
+    SELECT u.name AS sales_rep, COUNT(*) AS deal_count,
+      COALESCE(SUM(d.discount_amount), 0) AS discount,
+      COALESCE(SUM(d.total_amount), 0) AS revenue,
+      COALESCE(SUM(d.margin_amount), 0) AS profit
+    FROM deals d JOIN users u ON u.id = d.sales_rep_id ${filters.clause}
+    GROUP BY u.id, u.name ORDER BY profit DESC`, filters.values);
   return {
     summary: Object.fromEntries(Object.entries(summary).map(([key, value]) => [key, toNumber(value)])),
     statuses,
@@ -96,18 +71,15 @@ function metric(doc, label, value) {
 
 async function downloadReport(req, res) {
   try {
-    const report = await loadSummary(req.query || {});
+    const report = await loadReportData(req.query || {});
     const doc = new PDFDocument({ margin: 50 });
-
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=DealFlow360_Business_Report.pdf');
     doc.pipe(res);
-
     doc.fontSize(25).font('Helvetica-Bold').fillColor('#12305b').text('DealFlow360', { align: 'center' });
     doc.fontSize(15).font('Helvetica').fillColor('#000000').text('Business Performance Report', { align: 'center' });
     doc.fontSize(9).fillColor('#666666').text(`Generated ${new Date().toLocaleString()}`, { align: 'center' });
-
-    heading(doc, '1. Overall Performance');
+    heading(doc, 'Overall Performance');
     metric(doc, 'Total deals', report.summary.total_deals);
     metric(doc, 'Original quotation value', money(report.summary.quotation_value));
     metric(doc, 'Total discount given', money(report.summary.total_discount));
@@ -120,34 +92,13 @@ async function downloadReport(req, res) {
     metric(doc, 'Pending approvals', report.summary.pending_approvals);
     metric(doc, 'Closed deals', report.summary.closed_deals);
     metric(doc, 'High-risk deals', report.summary.high_risk_deals);
-
-    heading(doc, '2. Application Flow');
-    [
-      'Internal users register or log in.',
-      'Sales representatives create deals and apply discounts.',
-      'The intelligence layer evaluates discount, margin, risk, upsell and warehouse information.',
-      'Deals needing attention are routed to sales management or finance approval.',
-      'Approved deals continue to fulfillment and billing.',
-      'Negotiation changes can move a deal back into reapproval.',
-      'This report shows the resulting discount, revenue, cost, profit, margin and risk data.'
-    ].forEach((item, index) => doc.text(`${index + 1}. ${item}`, { lineGap: 2 }));
-
-    doc.addPage();
-    heading(doc, '3. Results by Deal Status');
-    report.statuses.forEach((row) => {
-      doc.font('Helvetica-Bold').text(`${row.status}: `, { continued: true });
-      doc.font('Helvetica').text(`${row.deal_count} deals | Revenue ${money(row.revenue)} | Profit ${money(row.profit)}`);
-    });
-
-    heading(doc, '4. Results by Sales Representative');
-    report.salesReps.forEach((row) => {
-      doc.font('Helvetica-Bold').text(`${row.sales_rep}: `, { continued: true });
-      doc.font('Helvetica').text(`${row.deal_count} deals | Discount ${money(row.discount)} | Revenue ${money(row.revenue)} | Profit ${money(row.profit)}`);
-    });
-
-    heading(doc, '5. Technology Used');
-    doc.text('Node.js runs the backend, Express.js provides REST routes and middleware, MySQL stores the business records, JWT protects sessions, bcrypt protects passwords, and PDFKit generates this report.');
-    doc.text('The report is generated from live database records, not hardcoded sample values.');
+    metric(doc, 'Profitable deals', report.summary.profitable_deals);
+    heading(doc, 'Deal Status Performance');
+    report.statuses.forEach((row) => doc.text(`${row.status}: ${row.deal_count} deals | Revenue ${money(row.revenue)} | Profit ${money(row.profit)}`));
+    heading(doc, 'Sales Representative Performance');
+    report.salesReps.forEach((row) => doc.text(`${row.sales_rep}: ${row.deal_count} deals | Discount ${money(row.discount)} | Revenue ${money(row.revenue)} | Profit ${money(row.profit)}`));
+    heading(doc, 'Technology');
+    doc.text('Node.js and Express.js provide the API, MySQL stores live business data, JWT protects access, bcrypt protects passwords, and PDFKit generates this report.');
     doc.end();
   } catch (error) {
     console.error('Business report error:', error);
@@ -157,12 +108,12 @@ async function downloadReport(req, res) {
 
 async function summary(req, res) {
   try {
-    res.json({ success: true, data: await loadSummary(req.query || {}) });
+    res.json({ success: true, data: await loadReportData(req.query || {}) });
   } catch (error) {
     res.status(500).json({ success: false, error: { code: 'REPORT_SUMMARY_ERROR', message: 'Unable to load report summary.' } });
   }
 }
 
 router.get('/summary', authenticate, authorize(...reportRoles), summary);
-router.get('/download', authenticate, authorize(...reportRoles), downloadReport);
+router.get(['/download', '/'], authenticate, authorize(...reportRoles), downloadReport);
 module.exports = router;

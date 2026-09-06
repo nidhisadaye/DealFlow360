@@ -8,24 +8,42 @@ type PortalData = {
   counts: { deals: number; openNegotiations: number };
 };
 
+type InternalCustomer = { id: string; name: string; company: string; email: string; tier: string; is_active?: boolean };
+
 function CustomerPortal() {
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [internalCustomers, setInternalCustomers] = useState<InternalCustomer[]>([]);
+  const user = JSON.parse(localStorage.getItem("dealflow360_user") || "null");
 
   useEffect(() => {
     const token = localStorage.getItem("dealflow360_token");
-    fetch("http://localhost:5000/api/customer-portal/overview", {
+    const endpoint = user?.role === "CUSTOMER" ? "http://localhost:5000/api/customer-portal/overview" : "http://localhost:5000/api/customers";
+    fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.error?.message || "Unable to load portal data.");
-        setData(result.data);
+        if (user?.role === "CUSTOMER") setData(result.data);
+        else setInternalCustomers(result.data || []);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load portal data."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user?.role]);
+
+  if (user?.role !== "CUSTOMER") {
+    return (
+      <div className="page-container">
+        <div className="page-header"><div><span className="eyebrow">CUSTOMER MANAGEMENT</span><h1>Customers</h1><p>Customer records connected to your sales workspace.</p></div></div>
+        <div className="content-card">
+          <div className="card-header"><div><h2>Customer Directory</h2><p>{loading ? "Loading customers..." : `${internalCustomers.length} customers from the database`}</p></div></div>
+          {error ? <div className="empty-state"><h3>Unable to load customers</h3><p>{error}</p></div> : internalCustomers.length === 0 && !loading ? <div className="empty-state"><h3>No customers found</h3><p>Add customer records to MySQL to display them here.</p></div> : <div className="portal-deal-list">{internalCustomers.map((customer) => <div className="portal-deal-row" key={customer.id}><div><strong>{customer.name}</strong><p>{customer.company} · {customer.email}</p></div><strong>{customer.tier}</strong></div>)}</div>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
