@@ -1,10 +1,33 @@
 const express = require('express');
 const pool = require('../config/db');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
+const { UserRole } = require('../config/enums');
 const { DealStatus, DealEventType, VALID_TRANSITIONS } = require('../config/enums');
 const logEvent = require('../utils/logEvent');
 
 const router = express.Router();
+
+// GET /api/fulfillment/summary - live fulfillment KPIs
+router.get('/fulfillment/summary', authenticate, async (req, res) => {
+  try {
+    const [[summary]] = await pool.query(`
+      SELECT
+        COALESCE(SUM(d.status = 'FULFILLMENT_PENDING'), 0) AS pending_fulfillment,
+        COALESCE(COUNT(wa.id), 0) AS allocation_count
+      FROM deals d
+      LEFT JOIN warehouse_allocations wa ON wa.deal_id = d.id
+    `);
+    res.json({
+      success: true,
+      data: {
+        pendingFulfillment: Number(summary.pending_fulfillment || 0),
+        allocationCount: Number(summary.allocation_count || 0),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Unable to load fulfillment summary.' } });
+  }
+});
 
 // GET /api/warehouses — list active warehouses
 router.get('/warehouses', authenticate, async (req, res) => {
@@ -13,6 +36,18 @@ router.get('/warehouses', authenticate, async (req, res) => {
     res.json({ success: true, data: rows, meta: { total: rows.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: err.message } });
+  }
+});
+
+router.post('/warehouses', authenticate, authorize(UserRole.ADMIN), async (req, res) => {
+  try {
+    const { name, location } = req.body || {};
+    if (!name || !location) return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Warehouse name and location are required.' } });
+    const id = `WH-${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    await pool.query('INSERT INTO warehouses (id, name, location, is_active) VALUES (?, ?, ?, TRUE)', [id, String(name).trim(), String(location).trim()]);
+    res.status(201).json({ success: true, data: { id, name: String(name).trim(), location: String(location).trim(), is_active: true } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Unable to add warehouse.' } });
   }
 });
 

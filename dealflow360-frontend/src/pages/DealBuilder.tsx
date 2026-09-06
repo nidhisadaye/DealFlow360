@@ -28,6 +28,16 @@ type DealItem = {
   subtotal: number;
 };
 
+type Evaluation = {
+  status: string;
+  riskScore: number;
+  riskLevel: string;
+  approval?: { required: boolean; reason?: string };
+  discount?: { requested: number; allowed: number; exceeded: boolean };
+  upsells?: Array<{ productName?: string; reason?: string }>;
+  warnings?: string[];
+};
+
 function DealBuilder({ onBack }: { onBack: () => void }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -36,12 +46,17 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
   const [title, setTitle] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [customerForm, setCustomerForm] = useState({ name: "", company: "", email: "", tier: "BRONZE" });
+  const [productForm, setProductForm] = useState({ name: "", category: "Hardware", salePrice: "", costPrice: "", billingType: "ONE_TIME" });
   const [quantity, setQuantity] = useState("1");
   const [discountPercent, setDiscountPercent] = useState("0");
 
   const [items, setItems] = useState<DealItem[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -88,8 +103,8 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
     }
 
     const qty = Number(quantity);
-    if (qty <= 0) {
-      setError("Quantity must be greater than 0");
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setError("Quantity must be a positive whole number");
       return;
     }
 
@@ -115,6 +130,44 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
     setItems(items.filter((_, i) => i !== index));
   };
 
+  const addCustomer = async () => {
+    const token = localStorage.getItem("dealflow360_token");
+    const response = await fetch("http://localhost:5000/api/customers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(customerForm),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error?.message || "Unable to add customer.");
+    setCustomers((current) => [...current, result.data]);
+    setSelectedCustomer(result.data.id);
+    setCustomerForm({ name: "", company: "", email: "", tier: "BRONZE" });
+    setShowCustomerForm(false);
+  };
+
+  const addProduct = async () => {
+    const token = localStorage.getItem("dealflow360_token");
+    const response = await fetch("http://localhost:5000/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        name: productForm.name,
+        category: productForm.category,
+        type: productForm.billingType === "RECURRING" ? "SERVICE" : "GOOD",
+        billing_type: productForm.billingType,
+        sale_price: Number(productForm.salePrice),
+        cost_price: Number(productForm.costPrice),
+        currency: "INR",
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.error?.message || "Unable to add product.");
+    setProducts((current) => [...current, result.data]);
+    setSelectedProduct(result.data.id);
+    setProductForm({ name: "", category: "Hardware", salePrice: "", costPrice: "", billingType: "ONE_TIME" });
+    setShowProductForm(false);
+  };
+
   const handleCreateDeal = async () => {
     setError("");
     setSuccess("");
@@ -122,6 +175,13 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
 
     if (!title || !selectedCustomer || items.length === 0) {
       setError("Please fill in title, select customer, and add at least one item");
+      setSubmitting(false);
+      return;
+    }
+
+    const normalizedDiscount = Number(discountPercent);
+    if (!Number.isFinite(normalizedDiscount) || normalizedDiscount < 0 || normalizedDiscount > 100) {
+      setError("Discount must be between 0 and 100%.");
       setSubmitting(false);
       return;
     }
@@ -142,7 +202,7 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
             productId: item.productId,
             quantity: item.quantity,
           })),
-          discountPercent: Number(discountPercent) || 0,
+          discountPercent: normalizedDiscount,
         }),
       });
 
@@ -158,6 +218,7 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
           throw new Error(evaluation.error?.message || "Deal was created, but intelligence evaluation failed.");
         }
         setSuccess(`Deal ${result.data.id} created and evaluated: ${evaluation.data.status.replaceAll("_", " ")}.`);
+        setEvaluation(evaluation.data);
         setTimeout(() => {
           onBack();
         }, 2000);
@@ -213,30 +274,27 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
       </div>
 
       {error && (
-        <div
-          style={{
-            background: "#fee",
-            color: "#c00",
-            padding: "12px",
-            borderRadius: "4px",
-            marginBottom: "20px",
-          }}
-        >
+        <div className="form-error" role="alert">
           {error}
         </div>
       )}
 
       {success && (
-        <div
-          style={{
-            background: "#efe",
-            color: "#060",
-            padding: "12px",
-            borderRadius: "4px",
-            marginBottom: "20px",
-          }}
-        >
+        <div className="form-success" role="status">
           {success}
+        </div>
+      )}
+
+      {evaluation && (
+        <div className="evaluation-note" style={{ marginBottom: "20px" }}>
+          <strong>Deal intelligence:</strong>{" "}
+          Risk {evaluation.riskLevel} ({Number(evaluation.riskScore || 0)}/100) ·{" "}
+          {evaluation.approval?.required ? "Approval required" : "No approval required"}
+          {evaluation.discount?.exceeded ? ` · Discount exceeds allowed ${evaluation.discount.allowed}%` : ""}
+          {evaluation.upsells?.length ? ` · ${evaluation.upsells.length} upsell suggestion(s)` : ""}
+          {evaluation.warnings?.length ? (
+            <div style={{ marginTop: "6px" }}>{evaluation.warnings.join(" ")}</div>
+          ) : null}
         </div>
       )}
 
@@ -264,9 +322,10 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
           </div>
 
           <div style={{ marginBottom: "15px" }}>
-            <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold" }}>
-              Customer *
-            </label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+              <label style={{ fontWeight: "bold" }}>Customer *</label>
+              <button type="button" className="link-button" onClick={() => setShowCustomerForm((current) => !current)}>+ Add customer</button>
+            </div>
             <select
               value={selectedCustomer}
               onChange={(e) => setSelectedCustomer(e.target.value)}
@@ -285,11 +344,31 @@ function DealBuilder({ onBack }: { onBack: () => void }) {
                 </option>
               ))}
             </select>
+            {showCustomerForm && (
+              <div className="inline-create-form">
+                <input placeholder="Customer name" value={customerForm.name} onChange={(event) => setCustomerForm({ ...customerForm, name: event.target.value })} />
+                <input placeholder="Company" value={customerForm.company} onChange={(event) => setCustomerForm({ ...customerForm, company: event.target.value })} />
+                <input type="email" placeholder="Email" value={customerForm.email} onChange={(event) => setCustomerForm({ ...customerForm, email: event.target.value })} />
+                <select value={customerForm.tier} onChange={(event) => setCustomerForm({ ...customerForm, tier: event.target.value })}><option value="BRONZE">Bronze</option><option value="SILVER">Silver</option><option value="GOLD">Gold</option></select>
+                <button type="button" className="primary-button" onClick={() => addCustomer().catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to add customer."))}>Save customer</button>
+              </div>
+            )}
           </div>
         </div>
 
         <div style={{ marginBottom: "30px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
           <h3>Add Products</h3>
+          <button type="button" className="link-button" onClick={() => setShowProductForm((current) => !current)}>+ Add product and price</button>
+          {showProductForm && (
+            <div className="inline-create-form">
+              <input placeholder="Product name" value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} />
+              <input placeholder="Category" value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} />
+              <input type="number" min="0" placeholder="Selling price" value={productForm.salePrice} onChange={(event) => setProductForm({ ...productForm, salePrice: event.target.value })} />
+              <input type="number" min="0" placeholder="Cost price" value={productForm.costPrice} onChange={(event) => setProductForm({ ...productForm, costPrice: event.target.value })} />
+              <select value={productForm.billingType} onChange={(event) => setProductForm({ ...productForm, billingType: event.target.value })}><option value="ONE_TIME">One-time</option><option value="RECURRING">Recurring</option></select>
+              <button type="button" className="primary-button" onClick={() => addProduct().catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to add product."))}>Save product</button>
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "10px", marginBottom: "15px" }}>
             <div>

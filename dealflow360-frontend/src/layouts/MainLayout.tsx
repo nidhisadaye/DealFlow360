@@ -49,20 +49,34 @@ const secondaryNavigation = [
   { label: "Settings", icon: Settings },
 ];
 
+const roleNavigation: Record<string, string[]> = {
+  SALES_REP: ["Dashboard", "Deals", "Deal Builder", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
+  SALES_MANAGER: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
+  FINANCE_OPERATIONS: ["Dashboard", "Deals", "Billing", "Reports", "Settings"],
+  ADMIN: ["Dashboard", "Deals", "Approvals", "Fulfillment", "Billing", "Customers", "Reports", "Settings"],
+  CUSTOMER: ["Dashboard", "Customers"],
+};
+
 function MainLayout() {
   const [activePage, setActivePage] = useState<Page>("Dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const storedUser = localStorage.getItem("dealflow360_user");
-  const user = storedUser
-    ? JSON.parse(storedUser)
-    : {
-        name: "Nidhi",
-        email: "nidhi.demo@dealflow360.com",
-        role: "SALES_REP",
-      };
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  if (!user) return null;
+  const allowedPages = roleNavigation[user.role] || roleNavigation.SALES_REP;
+  const visibleNavigation = navigation.filter((item) => allowedPages.includes(item.label));
+  const visibleSecondaryNavigation = secondaryNavigation.filter((item) => allowedPages.includes(item.label));
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem("dealflow360_token");
+    if (token) {
+      await fetch("http://localhost:5000/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined);
+    }
     localStorage.removeItem("dealflow360_token");
     localStorage.removeItem("dealflow360_user");
     window.location.reload();
@@ -243,6 +257,10 @@ function MainLayout() {
   );
 
   const renderPage = () => {
+    if (user.role === "CUSTOMER" && activePage === "Dashboard") {
+      return <CustomerPortal />;
+    }
+
     switch (activePage) {
       case "Deals":
         return <Deals onCreateDeal={() => handleNavigation("Deal Builder")} />;
@@ -310,7 +328,7 @@ function MainLayout() {
         <nav className="sidebar-nav">
           <div className="nav-section-label">WORKSPACE</div>
 
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const isActive = activePage === item.label;
 
@@ -330,7 +348,7 @@ function MainLayout() {
             SYSTEM
           </div>
 
-          {secondaryNavigation.map((item) => {
+          {visibleSecondaryNavigation.map((item) => {
             const Icon = item.icon;
             const isActive = activePage === item.label;
 
@@ -348,15 +366,17 @@ function MainLayout() {
         </nav>
 
         <div className="sidebar-bottom">
-          <button
-            className="create-deal-button"
-            onClick={() => handleNavigation("Deal Builder")}
-          >
-            <span>+</span>
-            Create Deal
-          </button>
+          {allowedPages.includes("Deal Builder") && (
+            <button
+              className="create-deal-button"
+              onClick={() => handleNavigation("Deal Builder")}
+            >
+              <span>+</span>
+              Create Deal
+            </button>
+          )}
 
-          <div className="sidebar-profile">
+          <button className="sidebar-profile" onClick={() => setProfileOpen((current) => !current)} aria-expanded={profileOpen}>
             <div className="profile-avatar">
               {user.name?.charAt(0)?.toUpperCase() || "N"}
             </div>
@@ -367,7 +387,15 @@ function MainLayout() {
             </div>
 
             <ChevronDown size={16} />
-          </div>
+          </button>
+          {profileOpen && (
+            <div className="profile-menu">
+              <strong>{user.name}</strong>
+              <span>{user.email}</span>
+              <button onClick={() => { setProfileOpen(false); handleNavigation("Settings"); }}><Settings size={15} /> Account settings</button>
+              <button className="profile-logout" onClick={handleLogout}><LogOut size={15} /> Log out</button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -388,14 +416,26 @@ function MainLayout() {
           </div>
 
           <div className="topbar-actions">
-            <button className="notification-button">
+            <button
+              className="notification-button"
+              onClick={() => handleNavigation("Approvals")}
+              title="Open pending approvals"
+            >
               <Bell size={19} />
               <span className="notification-dot"></span>
             </button>
 
-            <div className="topbar-avatar">
-              {user.name?.charAt(0)?.toUpperCase() || "N"}
-            </div>
+            <button className="topbar-profile-button" onClick={() => setProfileOpen((current) => !current)} aria-label="Open user profile">
+              <div className="topbar-avatar">{user.name?.charAt(0)?.toUpperCase() || "?"}</div>
+            </button>
+            {profileOpen && (
+              <div className="topbar-profile-menu">
+                <strong>{user.name}</strong>
+                <span>{user.email}</span>
+                <span>{user.role?.replaceAll("_", " ")}</span>
+                <button onClick={handleLogout}><LogOut size={15} /> Log out</button>
+              </div>
+            )}
           </div>
         </header>
 

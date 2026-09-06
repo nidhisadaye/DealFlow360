@@ -9,7 +9,6 @@ app.use(express.json());
 app.use('/api/chatbot', chatbotRoutes);
 
 const pool = require('./config/db');
-const { DealStatus } = require('./config/enums');
 
 const authRoutes = require('./routes/auth');
 const dealRoutes = require('./routes/deals');
@@ -20,7 +19,10 @@ const approvalRoutes = require('./routes/approvals');
 const warehouseRoutes = require('./routes/warehouses');
 const billingRoutes = require('./routes/billing');
 const negotiationRoutes = require('./routes/negotiations');
+const reportRoutes = require('./routes/reports');
 const evaluationRoutes = require('./routes/evaluation');
+const customerPortalRoutes = require('./routes/customerPortal');
+const dashboardRoutes = require('./routes/dashboard');
 
 
 app.get('/', (req, res) => {
@@ -62,6 +64,10 @@ app.use('/api', approvalRoutes);
 app.use('/api', warehouseRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', negotiationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/DealFlow360_Project_Report.pdf', reportRoutes);
+app.use('/api/customer-portal', customerPortalRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Intelligence evaluation route
 // POST /api/deals/:id/evaluate

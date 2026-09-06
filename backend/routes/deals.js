@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
+const { UserRole } = require('../config/enums');
 const logEvent = require('../utils/logEvent');
 
 const router = express.Router();
@@ -21,7 +22,7 @@ function serializeDeal(deal) {
 }
 
 // POST /api/deals — create a deal with items
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.ADMIN), async (req, res) => {
   const conn = await pool.getConnection();
   try {
     const { customerId, title, items, discountPercent } = req.body || {};
@@ -147,7 +148,7 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // GET /api/deals/summary — KPI totals across the complete filtered result set
-router.get('/summary', authenticate, async (req, res) => {
+router.get('/summary', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN), async (req, res) => {
   try {
     const params = [];
     const where = [];
@@ -185,7 +186,7 @@ router.get('/summary', authenticate, async (req, res) => {
 });
 
 // GET /api/deals — list all deals with pagination and display names
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN), async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
@@ -227,7 +228,7 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // GET /api/deals/:id — get one deal with items
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.FINANCE_OPERATIONS, UserRole.ADMIN), async (req, res) => {
   try {
     const [deals] = await pool.query('SELECT * FROM deals WHERE id = ?', [req.params.id]);
     if (deals.length === 0) {
@@ -241,7 +242,7 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // PUT /api/deals/:id — update a deal (basic fields only for now)
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, authorize(UserRole.SALES_REP, UserRole.SALES_MANAGER, UserRole.ADMIN), async (req, res) => {
   try {
     const { title, status, discountPercent } = req.body || {};
     const [existing] = await pool.query('SELECT * FROM deals WHERE id = ?', [req.params.id]);
