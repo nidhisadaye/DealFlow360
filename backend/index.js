@@ -20,6 +20,7 @@ const approvalRoutes = require('./routes/approvals');
 const warehouseRoutes = require('./routes/warehouses');
 const billingRoutes = require('./routes/billing');
 const negotiationRoutes = require('./routes/negotiations');
+const reportRoutes = require('./routes/reports');
 const evaluationRoutes = require('./routes/evaluation');
 
 
@@ -62,6 +63,8 @@ app.use('/api', approvalRoutes);
 app.use('/api', warehouseRoutes);
 app.use('/api', billingRoutes);
 app.use('/api', negotiationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/DealFlow360_Project_Report.pdf', reportRoutes);
 
 // Intelligence evaluation route
 // POST /api/deals/:id/evaluate
